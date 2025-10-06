@@ -5,6 +5,8 @@
 - `uv run sync` to download the requirements.
 - `uv run main` to run the project.
 
+> `[Stream Processor] Ending the stream, exiting.` After this log press Ctrl+C to stop the program.
+
 ## Work Flow
 
 ![Work Flow](./workflow.png)

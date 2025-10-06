@@ -1,4 +1,5 @@
 import time
+import uuid
 import signal
 import asyncio
 import threading
@@ -9,6 +10,7 @@ from utils.unique_async_queue import UniqueAsyncQueue
 from utils.logger import app_logger as logger
 
 async def main():
+    stream_id = f'{uuid.uuid4()}'
     start_time = time.time()
     # To signal async functions for stop
     async_stop = asyncio.Event()
@@ -18,13 +20,13 @@ async def main():
     audio_frame_q = UniqueAsyncQueue()
     video_frame_q = UniqueAsyncQueue()
     stream_processor = StreamProcessor("./data/test_videos/news.mp4", audio_frame_q, video_frame_q)
-    video_processor = VideoProcessor("./data/frames", video_frame_q)
+    video_processor = VideoProcessor(f"./data/{stream_id}/frames", video_frame_q)
 
     stream_task = threading.Thread(target=stream_processor.start_stream, args=(thread_stop,), daemon=True)
     stream_task.start()
 
     tasks = [
-        asyncio.create_task(video_processor.sample_frames(async_stop))
+        asyncio.create_task(video_processor.sample_frames(stream_id, async_stop))
     ]
 
     def _signal_handler(signum, frame):

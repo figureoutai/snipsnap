@@ -16,7 +16,7 @@ class VideoProcessor:
         self.frame_index = 0
         self.last_saved_pts = None
 
-    async def sample_frames(self, stop_event: Event):
+    async def sample_frames(self, stream_id: str, stop_event: Event):
         logger.info("[VideoProcessor] started to sample the video frames")
         while True:
             if stop_event.is_set():
@@ -32,10 +32,11 @@ class VideoProcessor:
             ts = float(frame.pts * frame.time_base) if frame.pts is not None else 0.0
             ts = round(ts, 3)
             
-            if self.last_saved_pts is not None and ts - self.last_saved_pts < self.sample_rate:
-                # logger.info("[VideoProcessor] skipping the frame")
+            if self.last_saved_pts is not None and ts - self.last_saved_pts < (1/self.sample_rate):
+                # logger.debug("[VideoProcessor] skipping the frame")
                 continue
 
+            # logger.debug(f"[VideoProcessor] captured the frame at {ts}")           
             filename = f"frame_{self.frame_index:09d}.jpg"
             filepath = os.path.join(self.output_dir, filename)
 
@@ -50,6 +51,7 @@ class VideoProcessor:
 
             # TODO: Push this to aurora db, use async functions
             metadata = {
+                "stream_id": stream_id,
                 "filename": filename,
                 "frame_index": self.frame_index,
                 "timestamp": ts,
