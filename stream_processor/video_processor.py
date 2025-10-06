@@ -1,4 +1,5 @@
 import os
+import asyncio
 
 from PIL import Image
 from av import VideoFrame
@@ -16,17 +17,24 @@ class VideoProcessor:
         self.last_saved_pts = None
 
     async def sample_frames(self, stop_event: Event):
-        logger.info("[Video Processor] started to sample the video frames")
+        logger.info("[VideoProcessor] started to sample the video frames")
         while True:
-            if stop_event.is_set() and self.frames_q.empty():
+            if stop_event.is_set():
+                logger.info("[VideoProcessor] stop event was set")
                 break
+            
+            if self.frames_q.empty():
+                await asyncio.sleep(0.2)
+                continue
 
             frame: VideoFrame = await self.frames_q.get()
 
             ts = float(frame.pts * frame.time_base) if frame.pts is not None else 0.0
             ts = round(ts, 3)
+            
             if self.last_saved_pts is not None and ts - self.last_saved_pts < self.sample_rate:
-                return
+                # logger.info("[VideoProcessor] skipping the frame")
+                continue
 
             filename = f"frame_{self.frame_index:09d}.jpg"
             filepath = os.path.join(self.output_dir, filename)
@@ -51,4 +59,3 @@ class VideoProcessor:
             }
             self.frame_index += 1
             self.last_saved_pts = ts
-
