@@ -41,9 +41,9 @@ class StreamProcessor:
                             elif packet.stream.type == "audio":
                                 self.audio_frame_q.put_nowait(frame)
                     except Exception as e:
-                        logger.error("[Stream Processor] Error decoding packet:", e)
+                        logger.error(f"[Stream Processor] Error decoding packet: {e}")
                         continue
         except Exception as e:
-            logger.error("[Stream Processor] encountered error:", e)
+            logger.error(f"[Stream Processor] encountered error: {e}")
         finally:
             logger.info("[Stream Processor] Ending the stream, exiting.")

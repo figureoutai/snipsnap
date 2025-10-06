@@ -4,10 +4,12 @@ import signal
 import asyncio
 import threading
 
+
+from utils.logger import app_logger as logger
+from utils.unique_async_queue import UniqueAsyncQueue
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
-from utils.unique_async_queue import UniqueAsyncQueue
-from utils.logger import app_logger as logger
+from stream_processor.audio_processor import AudioProcessor
 
 async def main():
     stream_id = f'{uuid.uuid4()}'
@@ -21,12 +23,14 @@ async def main():
     video_frame_q = UniqueAsyncQueue()
     stream_processor = StreamProcessor("./data/test_videos/news.mp4", audio_frame_q, video_frame_q)
     video_processor = VideoProcessor(f"./data/{stream_id}/frames", video_frame_q)
+    audio_processor = AudioProcessor(f"./data/{stream_id}/audio_chunks", audio_frame_q)
 
     stream_task = threading.Thread(target=stream_processor.start_stream, args=(thread_stop,), daemon=True)
     stream_task.start()
 
     tasks = [
-        asyncio.create_task(video_processor.sample_frames(stream_id, async_stop))
+        asyncio.create_task(video_processor.process_frames(stream_id, async_stop)),
+        asyncio.create_task(audio_processor.process_frames(stream_id, async_stop))
     ]
 
     def _signal_handler(signum, frame):

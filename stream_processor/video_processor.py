@@ -11,12 +11,12 @@ class VideoProcessor:
     def __init__(self,  output_dir: str, video_frame_q: UniqueAsyncQueue, video_frame_sample_rate: int = 2):
         self.sample_rate = video_frame_sample_rate
         self.output_dir = output_dir
-        os.makedirs(self.output_dir, exist_ok=True)    
+        os.makedirs(self.output_dir, exist_ok=True)   
         self.frames_q = video_frame_q
         self.frame_index = 0
         self.last_saved_pts = None
 
-    async def sample_frames(self, stream_id: str, stop_event: Event):
+    async def process_frames(self, stream_id: str, stop_event: Event):
         logger.info("[VideoProcessor] started to sample the video frames")
         while True:
             if stop_event.is_set():
