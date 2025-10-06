@@ -1,0 +1,46 @@
+import av
+import queue
+
+from av.stream import Disposition
+from utils.logger import app_logger as logger
+
+class StreamProcessor:
+    def __init__(self, url: str, audio_frame_q: queue.Queue, video_frame_q: queue.Queue):
+        if not audio_frame_q or not video_frame_q:
+            raise Exception("Stream processor resquires audio and video frame queues")
+        self.audio_frame_q = audio_frame_q
+        self.video_frame_q = video_frame_q
+        self.stream_url = url
+
+    def stream(self):
+        logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
+        try:
+            with av.open(self.stream_url) as container:
+                video_stream = container.streams.video[0] if container.streams.video else None
+                audio_stream = None
+                for stream in container.streams.audio:
+                    if stream.disposition & Disposition.default:
+                        audio_stream = stream
+                        break
+                if audio_stream is None and container.streams.audio:
+                    audio_stream = container.streams.audio[0]
+
+                if not video_stream:
+                    raise Exception("Stream does not have video stream")
+                if not audio_stream:
+                    raise Exception("Stream does not have audio stream")
+                
+                for packet in container.demux(audio_stream, video_stream):
+                    try:
+                        for frame in packet.decode():
+                            if packet.stream.type == "video":
+                                self.video_frame_q.put(frame)
+                            elif packet.stream.type == "audio":
+                                self.audio_frame_q.put(frame)
+                    except Exception as e:
+                        print("[Stream Processor] Error decoding packet:", e)
+                        continue
+        except Exception as e:
+            print("[Stream Processor] encountered error:", e)
+        finally:
+            print("[Stream Processor] Ending the stream, exiting.")
