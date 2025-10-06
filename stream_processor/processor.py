@@ -1,18 +1,18 @@
 import av
-import queue
 
 from av.stream import Disposition
 from utils.logger import app_logger as logger
+from utils.unique_async_queue import UniqueAsyncQueue
 
 class StreamProcessor:
-    def __init__(self, url: str, audio_frame_q: queue.Queue, video_frame_q: queue.Queue):
+    def __init__(self, url: str, audio_frame_q: UniqueAsyncQueue, video_frame_q: UniqueAsyncQueue):
         if not audio_frame_q or not video_frame_q:
             raise Exception("Stream processor resquires audio and video frame queues")
         self.audio_frame_q = audio_frame_q
         self.video_frame_q = video_frame_q
         self.stream_url = url
 
-    def stream(self):
+    async def start_stream(self):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
         try:
             with av.open(self.stream_url) as container:
@@ -34,9 +34,9 @@ class StreamProcessor:
                     try:
                         for frame in packet.decode():
                             if packet.stream.type == "video":
-                                self.video_frame_q.put(frame)
+                                await self.video_frame_q.put(frame)
                             elif packet.stream.type == "audio":
-                                self.audio_frame_q.put(frame)
+                                await self.audio_frame_q.put(frame)
                     except Exception as e:
                         print("[Stream Processor] Error decoding packet:", e)
                         continue
