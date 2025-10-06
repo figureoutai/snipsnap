@@ -1,4 +1,7 @@
+import time
+import signal
 import asyncio
+import threading
 
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
@@ -6,19 +9,46 @@ from utils.unique_async_queue import UniqueAsyncQueue
 from utils.logger import app_logger as logger
 
 async def main():
+    start_time = time.time()
+    # To signal async functions for stop
+    async_stop = asyncio.Event()
+    thread_stop = threading.Event()
+    loop = asyncio.get_running_loop()
+
     audio_frame_q = UniqueAsyncQueue()
     video_frame_q = UniqueAsyncQueue()
     stream_processor = StreamProcessor("./data/test_videos/news.mp4", audio_frame_q, video_frame_q)
     video_processor = VideoProcessor("./data/frames", video_frame_q)
+
+    stream_task = threading.Thread(target=stream_processor.start_stream, args=(thread_stop,), daemon=True)
+    stream_task.start()
+
     tasks = [
-        asyncio.create_task(stream_processor.start_stream()),
-        asyncio.create_task(video_processor.sample_frames())
+        asyncio.create_task(video_processor.sample_frames(async_stop))
     ]
 
-    await asyncio.wait(
-        [asyncio.gather(*tasks)],
-        return_when=asyncio.FIRST_COMPLETED
-    )
+    def _signal_handler(signum, frame):
+        print(f"Received signal {signum}; initiating shutdown.")
+        thread_stop.set()
+        loop.call_soon_threadsafe(async_stop.set)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, _signal_handler)
+
+    try:
+        await asyncio.wait(
+            [asyncio.gather(*tasks), asyncio.shield(async_stop.wait())],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        if async_stop.is_set():
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        thread_stop.set()
+        print("Shutdown complete.")
+        end_time = time.time()
+        logger.info(f"Total time taken by pipeline is: {end_time-start_time}s", )
 
 
 if __name__ == "__main__":

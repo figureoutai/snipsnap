@@ -10,4 +10,7 @@ wheels/
 .venv
 
 # Test Data Dir
-data
+data/frames
+
+# Logs
+*.log

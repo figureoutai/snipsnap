@@ -1,5 +1,6 @@
 import av
 
+from threading import Event
 from av.stream import Disposition
 from utils.logger import app_logger as logger
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -12,7 +13,7 @@ class StreamProcessor:
         self.video_frame_q = video_frame_q
         self.stream_url = url
 
-    async def start_stream(self):
+    def start_stream(self, stop_event: Event):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
         try:
             with av.open(self.stream_url) as container:
@@ -31,16 +32,18 @@ class StreamProcessor:
                     raise Exception("Stream does not have audio stream")
                 
                 for packet in container.demux(audio_stream, video_stream):
+                    if stop_event.is_set():
+                        break
                     try:
                         for frame in packet.decode():
                             if packet.stream.type == "video":
-                                await self.video_frame_q.put(frame)
+                                self.video_frame_q.put_nowait(frame)
                             elif packet.stream.type == "audio":
-                                await self.audio_frame_q.put(frame)
+                                self.audio_frame_q.put_nowait(frame)
                     except Exception as e:
-                        print("[Stream Processor] Error decoding packet:", e)
+                        logger.error("[Stream Processor] Error decoding packet:", e)
                         continue
         except Exception as e:
-            print("[Stream Processor] encountered error:", e)
+            logger.error("[Stream Processor] encountered error:", e)
         finally:
-            print("[Stream Processor] Ending the stream, exiting.")
+            logger.info("[Stream Processor] Ending the stream, exiting.")

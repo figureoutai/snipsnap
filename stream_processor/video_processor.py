@@ -2,6 +2,7 @@ import os
 
 from PIL import Image
 from av import VideoFrame
+from asyncio import Event
 from utils.unique_async_queue import UniqueAsyncQueue
 from utils.logger import app_logger as logger
 
@@ -9,13 +10,17 @@ class VideoProcessor:
     def __init__(self,  output_dir: str, video_frame_q: UniqueAsyncQueue, video_frame_sample_rate: int = 2):
         self.sample_rate = video_frame_sample_rate
         self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)    
         self.frames_q = video_frame_q
         self.frame_index = 0
         self.last_saved_pts = None
 
-    async def sample_frames(self):
+    async def sample_frames(self, stop_event: Event):
         logger.info("[Video Processor] started to sample the video frames")
         while True:
+            if stop_event.is_set() and self.frames_q.empty():
+                break
+
             frame: VideoFrame = await self.frames_q.get()
 
             ts = float(frame.pts * frame.time_base) if frame.pts is not None else 0.0
@@ -25,6 +30,7 @@ class VideoProcessor:
 
             filename = f"frame_{self.frame_index:09d}.jpg"
             filepath = os.path.join(self.output_dir, filename)
+
             try:
                 # TODO: Need to save this to S3 bucket as well
                 img: Image = frame.to_image()
