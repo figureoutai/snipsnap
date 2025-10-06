@@ -54,6 +54,7 @@ class AudioChunker:
             last = self.buffer[-1]
             end_ts = float(last.pts * last.time_base) if last.pts else None
             # TODO: need to save this to aurora db, separate audio metadata table
+            # TODO: Push the audio file to S3 as well
             metadata = {
                 "stream_id": stream_id,
                 "filename": filename,
@@ -105,4 +106,3 @@ class AudioProcessor:
             logger.error(f"[AudioProcessor] Error flushing chunk on shutdown: {e}")
 
         logger.info("[AudioProcessor] Audio worker exiting.")
-
