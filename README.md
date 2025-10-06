@@ -1,5 +1,10 @@
 # Clip Highlights
 
+## Setting Up
+
+- `uv run sync` to download the requirements.
+- `uv run main` to run the project.
+
 ## Work Flow
 
 ![Work Flow](./workflow.png)

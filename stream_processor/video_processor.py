@@ -34,6 +34,7 @@ class VideoProcessor:
                 print("Error saving video frame:", e)
                 return
 
+            # TODO: Push this to aurora db, use async functions
             metadata = {
                 "filename": filename,
                 "frame_index": self.frame_index,
@@ -44,6 +45,4 @@ class VideoProcessor:
             }
             self.frame_index += 1
             self.last_saved_pts = ts
-
-            return metadata
 
