@@ -3,12 +3,12 @@ import av
 import time
 import asyncio
 
-from asyncio import Event
 from typing import List
+from asyncio import Event
 from av import AudioFrame
 from config import TARGET_SAMPLE_RATE
-from av.audio.resampler import AudioResampler
 from utils.logger import app_logger as logger
+from av.audio.resampler import AudioResampler
 from utils.unique_async_queue import UniqueAsyncQueue
 
 class AudioChunker:
@@ -62,7 +62,8 @@ class AudioChunker:
                 "start_timestamp": round(self.start_pts, 3) if self.start_pts else None,
                 "end_timestamp": round(end_ts, 3) if end_ts else None,
                 "sample_rate": sample_rate,
-                "captured_at": round(time.time())
+                "captured_at": round(time.time()),
+                "transcript": "", 
             }
             # save_audio_chunk(metadata)
             # loop.call_soon_threadsafe(transcription_queue.put_nowait, self.chunk_index)
@@ -95,13 +96,13 @@ class AudioProcessor:
 
             frame: AudioFrame = await self.frames_q.get()
             try:
-                await self.chunker.handle_frame(stream_id, frame)
+                asyncio.create_task(self.chunker.handle_frame(stream_id, frame))
             except Exception as e:
                 logger.error(f"[AudioProcessor] Audio worker error: {e}")
 
         # Flush chunker for any leftover chunks
         try:
-            await self.chunker.flush_chunk(stream_id)
+            asyncio.create_task(self.chunker.flush_chunk(stream_id))
         except Exception as e:
             logger.error(f"[AudioProcessor] Error flushing chunk on shutdown: {e}")
 

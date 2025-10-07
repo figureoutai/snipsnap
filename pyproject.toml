@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiofiles>=24.1.0",
+    "amazon-transcribe>=0.6.4",
     "av>=15.1.0",
     "pillow>=11.3.0",
 ]
