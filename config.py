@@ -13,7 +13,7 @@ AUDIO_METADATA_TABLE_NAME = "audio_metadata"
 
 DB_HOST = "clip-highlights-instance-1.cdgkfoacvf6u.us-east-1.rds.amazonaws.com"
 DB_USER = "admin"
-DB_PASSWORD = "XaJvQc$Gf>59$AV>#m78Dl?*ysT7"
+DB_PASSWORD = "<admin-password>"
 
 # AUDIO CONFIGURATION
 TARGET_SAMPLE_RATE = 16000
