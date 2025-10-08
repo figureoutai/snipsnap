@@ -4,6 +4,8 @@ import librosa
 import numpy as np
 
 from candidate_clip import CandidateClip
+from captions_service import CaptionService
+from utils.helpers import run_sync_func
 from utils.logger import app_logger as logger
 from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
 
@@ -51,9 +53,10 @@ class SaliencyScorer:
         return float(saliency)
 
 
-class SaliencyScorerService:
+class ClipScorerService:
     def __init__(self):
         self.scorer = SaliencyScorer()
+        self.caption_service = CaptionService()
     
     def get_slice_saliency_score(self, candidate_clip: CandidateClip):
         audio = candidate_clip.load_audio_segment(AUDIO_CHUNK)
@@ -68,7 +71,7 @@ class SaliencyScorerService:
         else:
             return 0, 5
     
-    async def score_saliency(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
+    async def score_clips(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
         base_path = f"{BASE_DIR}/{stream_id}"
         should_break = False
         i = 0
@@ -91,20 +94,21 @@ class SaliencyScorerService:
                     continue
             
             score = self.get_slice_saliency_score(start_time, end_time, base_path)
+            highlight_score, caption = await run_sync_func(self.caption_service.generate_clip_caption, candidate_clip, audio_metadata)
             # TODO: store the data in saliency score table
             metadata = {
                 "stream_id": stream_id,
                 "start_time": start_time,
                 "end_time": end_time,
                 "saliency_score": score,
-                "caption": "",
-                "highlight_score": 0
+                "caption": caption,
+                "highlight_score": highlight_score
             }
             i += 1
 
 
 if __name__ == "__main__":
-    scorer = SaliencyScorerService()
+    scorer = ClipScorerService()
     for i in range(0, 25):
         start = i * 5
         end = start + 5
