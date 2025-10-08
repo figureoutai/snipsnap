@@ -6,6 +6,7 @@ import librosa
 import numpy as np
 
 from utils.logger import app_logger as logger
+from candidate_clip import CandidateClip
 from utils.helpers import get_audio_filename, get_video_frame_filename
 from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
 
@@ -56,56 +57,10 @@ class SaliencyScorer:
 class SaliencyScorerService:
     def __init__(self):
         self.scorer = SaliencyScorer()
-
-    def get_audio_chunk_indexes(self, start_time, end_time, chunk_duration):
-        start_chunk = int(start_time // chunk_duration)
-        end_chunk = int(end_time // chunk_duration)
-
-        # If end_time is exactly on a boundary, no segment lies in the prvious chunk
-        if end_time % chunk_duration == 0 and end_time != 0:
-            end_chunk -= 1
-
-        return list(range(start_chunk, end_chunk + 1))
     
-    def load_audio_segment(self, start_time, end_time, chunk_duration=5, base_path="audio_chunks"):
-        chunks = self.get_audio_chunk_indexes(start_time, end_time, chunk_duration)
-        sr = 0
-        audios = []
-        for c in chunks:
-            filepath = f"{base_path}/{get_audio_filename(c)}"
-            if not os.path.exists():
-                logger.warning(f"[SaliencyScorerService] audio chunk does not exist {os.path.basename(filepath)}")
-                continue
-            container = av.open(filepath)
-            audio_stream = container.streams.audio[0]
-            sr = audio_stream.rate
-            frames = []
-            for frame in container.decode(audio_stream):
-                nd_array = frame.to_ndarray()
-                frames.append(nd_array)
-            audio = np.concatenate(frames, axis=1)
-            audios.append(audio)
-
-        # concatenate and crop to exact time window
-        full_audio = np.concatenate(audios, axis=1)
-        start_offset = int((start_time - chunks[0] * chunk_duration) * sr * 2)
-        end_offset = int(start_offset + (end_time - start_time) * sr * 2)
-        return full_audio[:, start_offset:end_offset]
-    
-    def load_images(self, start_time, end_time, base_path):
-        images = []
-        for i in range(start_time, end_time * VIDEO_FRAME_SAMPLE_RATE):
-            filepath = f"{base_path}/{get_video_frame_filename(i)}"
-            if not os.path.exists():
-                logger.warning(f"[SaliencyScorerService] video frame does not exist {os.path.basename(filepath)}")
-                continue
-            images.append(cv2.imread(filename=filepath))
-        
-        return images
-
-    def get_slice_saliency_score(self, start_time, end_time, base_path):
-        audio = self.load_audio_segment(start_time, end_time, base_path=f"{base_path}/audio_chunks")
-        frames = self.load_images(start_time, end_time, base_path=f"{base_path}/frames")
+    def get_slice_saliency_score(self, candidate_clip: CandidateClip):
+        audio = candidate_clip.load_audio_segment(AUDIO_CHUNK)
+        frames = candidate_clip.load_images()
         return self.scorer.compute_saliency(frames, audio)
     
     def _get_slice(self, i):
@@ -124,16 +79,18 @@ class SaliencyScorerService:
             if should_break:
                 break
             start_time, end_time = self._get_slice(i)
-            audio_chunk_indexes = self.get_audio_chunk_indexes(start_time, end_time, AUDIO_CHUNK)
+            candidate_clip = CandidateClip(base_path, start_time, end_time)
+            audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
 
             frame_metdata = [] # TODO: get frame metadata from aurora offset = start_time * VIDEO_FRAME_SAMPLE_RATE, limit = CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE
             audio_metdata = [] # TODO: get audio metadata from aurora, for audio chunk indexes
             
             if len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE or len(audio_metdata) != len(audio_chunk_indexes):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
-                    score = self.get_slice_saliency_score(start_time, end_time, base_path)
                     should_break = True
-                await asyncio.sleep(0.2)
+                else:
+                    await asyncio.sleep(0.2)
+                    continue
             
             score = self.get_slice_saliency_score(start_time, end_time, base_path)
             # TODO: store the data in saliency score table
@@ -141,12 +98,12 @@ class SaliencyScorerService:
                 "stream_id": stream_id,
                 "start_time": start_time,
                 "end_time": end_time,
-                "saliency_score": score
+                "saliency_score": score,
+                "caption": "",
+                "highlight_score": 0
             }
             i += 1
 
-    
-    
 
 if __name__ == "__main__":
     scorer = SaliencyScorerService()

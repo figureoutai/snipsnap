@@ -12,6 +12,7 @@ from utils.unique_async_queue import UniqueAsyncQueue
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
+from saliency_scorer_service import SaliencyScorerService
 
 async def main():
     stream_id = f'{uuid.uuid4()}'
@@ -29,6 +30,7 @@ async def main():
     video_processor = VideoProcessor(f"{BASE_DIR}/{stream_id}/frames", video_frame_q)
     audio_processor = AudioProcessor(f"{BASE_DIR}/{stream_id}/audio_chunks", audio_frame_q)
     audio_transcriber = AudioTranscriber()
+    saliency_scorer_service = SaliencyScorerService()
 
     stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
     stream_task.start()
@@ -36,7 +38,8 @@ async def main():
     tasks = [
         asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
-        # asyncio.create_task(audio_transcriber.transcribe_audio(async_stop))
+        # asyncio.create_task(audio_transcriber.transcribe_audio(async_stop)),
+        # saliency_scorer_service.score_saliency(stream_id, audio_processor_event, video_processor_event),
     ]
 
     def _signal_handler(signum, frame):
