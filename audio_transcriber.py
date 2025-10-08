@@ -3,10 +3,11 @@ import asyncio
 import aiofiles
 
 from asyncio import Event
-from amazon_transcribe.model import TranscriptEvent
+from config import AUDIO_CHUNK_DIR, AWS_REGION, LANGUAGE_CODE
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
-from config import AUDIO_CHUNK_DIR, AWS_REGION, LANGUAGE_CODE
+from amazon_transcribe.model import TranscriptEvent, StartStreamTranscriptionEventStream
+
 
 class TranscriptEventHandler(TranscriptResultStreamHandler):
     def __init__(self, stream_id, filename, output_stream):
@@ -59,7 +60,7 @@ class AudioTranscriber:
 
             await asyncio.sleep(2)
 
-    async def send_audio_chunks(filepath, transcription_stream):
+    async def send_audio_chunks(filepath: str, transcription_stream: StartStreamTranscriptionEventStream):
         async with aiofiles.open(filepath, 'rb') as audio_file:
             chunk_size = 1024 * 16
             while True:

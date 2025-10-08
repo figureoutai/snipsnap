@@ -12,6 +12,10 @@ wheels/
 # Test Data Dir
 data/**/frames
 data/**/audio_chunks
+data/**/new_chunks
 
 # Logs
 *.log
+
+# VSCode settings
+.vscode

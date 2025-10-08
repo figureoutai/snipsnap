@@ -4,8 +4,9 @@ import asyncio
 from PIL import Image
 from av import VideoFrame
 from asyncio import Event
-from utils.unique_async_queue import UniqueAsyncQueue
 from utils.logger import app_logger as logger
+from utils.helpers import get_video_frame_filename
+from utils.unique_async_queue import UniqueAsyncQueue
 
 class VideoProcessor:
     def __init__(self,  output_dir: str, video_frame_q: UniqueAsyncQueue, video_frame_sample_rate: int = 2):
@@ -37,7 +38,7 @@ class VideoProcessor:
                 continue
 
             # logger.debug(f"[VideoProcessor] captured the frame at {ts}")           
-            filename = f"frame_{self.frame_index:09d}.jpg"
+            filename = get_video_frame_filename(self.frame_index)
             filepath = os.path.join(self.output_dir, filename)
 
             try:

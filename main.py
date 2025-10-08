@@ -4,7 +4,6 @@ import signal
 import asyncio
 import threading
 
-
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -22,7 +21,7 @@ async def main():
 
     audio_frame_q = UniqueAsyncQueue()
     video_frame_q = UniqueAsyncQueue()
-    stream_processor = StreamProcessor("./data/test_videos/news.mp4", audio_frame_q, video_frame_q)
+    stream_processor = StreamProcessor("./data/test_videos/apple.mp4", audio_frame_q, video_frame_q)
     video_processor = VideoProcessor(f"./data/{stream_id}/frames", video_frame_q)
     audio_processor = AudioProcessor(f"./data/{stream_id}/audio_chunks", audio_frame_q)
     audio_transcriber = AudioTranscriber()

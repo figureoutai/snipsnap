@@ -7,6 +7,7 @@ from typing import List
 from asyncio import Event
 from av import AudioFrame
 from config import TARGET_SAMPLE_RATE
+from utils.helpers import get_audio_filename
 from utils.logger import app_logger as logger
 from av.audio.resampler import AudioResampler
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -32,7 +33,7 @@ class AudioChunker:
         if not self.buffer:
             return
 
-        filename = f"audio_{self.chunk_index:06d}.wav"
+        filename = get_audio_filename(self.chunk_index)
         filepath = os.path.join(self.output_dir, filename)
 
         try:
