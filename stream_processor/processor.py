@@ -13,7 +13,7 @@ class StreamProcessor:
         self.video_frame_q = video_frame_q
         self.stream_url = url
 
-    def start_stream(self, stop_event: Event):
+    def start_stream(self, stream_processor_event: Event):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
         try:
             with av.open(self.stream_url) as container:
@@ -32,7 +32,7 @@ class StreamProcessor:
                     raise Exception("Stream does not have audio stream")
                 
                 for packet in container.demux(audio_stream, video_stream):
-                    if stop_event.is_set():
+                    if stream_processor_event.is_set():
                         break
                     try:
                         for frame in packet.decode():
@@ -47,3 +47,4 @@ class StreamProcessor:
             logger.error(f"[Stream Processor] encountered error: {e}")
         finally:
             logger.info("[Stream Processor] Ending the stream, exiting.")
+            stream_processor_event.set()

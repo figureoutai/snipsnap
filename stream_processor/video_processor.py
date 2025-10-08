@@ -1,9 +1,9 @@
 import os
 import asyncio
+import threading
 
 from PIL import Image
 from av import VideoFrame
-from asyncio import Event
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -17,10 +17,10 @@ class VideoProcessor:
         self.frame_index = 0
         self.last_saved_pts = None
 
-    async def process_frames(self, stream_id: str, stop_event: Event):
+    async def process_frames(self, stream_id: str, video_processor_event: asyncio.Event, stream_processor_event: threading.Event):
         logger.info("[VideoProcessor] started to sample the video frames")
         while True:
-            if stop_event.is_set():
+            if video_processor_event.is_set() or (stream_processor_event.is_set() and self.frames_q.empty()):
                 logger.info("[VideoProcessor] stop event was set")
                 break
             
@@ -62,3 +62,5 @@ class VideoProcessor:
             }
             self.frame_index += 1
             self.last_saved_pts = ts
+        
+        video_processor_event.set()

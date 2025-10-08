@@ -2,9 +2,9 @@ import os
 import av
 import time
 import asyncio
+import threading
 
 from typing import List
-from asyncio import Event
 from av import AudioFrame
 from config import TARGET_SAMPLE_RATE
 from utils.helpers import get_audio_filename
@@ -83,11 +83,11 @@ class AudioProcessor:
         self.chunker = AudioChunker(audio_chunk_dir, audio_chunk_duration_in_secs)
         self.frames_q = audio_frame_q
 
-    async def process_frames(self, stream_id: str, stop_event: Event):
+    async def process_frames(self, stream_id: str, audio_processor_event: asyncio.Event, stream_processor_event: threading.Event):
         logger.info("[AudioProcessor] started to sample the video frames")
 
         while True:
-            if stop_event.is_set():
+            if audio_processor_event.is_set() or (stream_processor_event.is_set() and self.frames_q.empty()):
                 logger.info("[AudioProcessor] stop event was set")
                 break
             
@@ -108,3 +108,4 @@ class AudioProcessor:
             logger.error(f"[AudioProcessor] Error flushing chunk on shutdown: {e}")
 
         logger.info("[AudioProcessor] Audio worker exiting.")
+        audio_processor_event.set()

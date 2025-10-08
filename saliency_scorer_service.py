@@ -3,7 +3,7 @@ import cv2
 import librosa
 import numpy as np
 
-from config import VIDEO_FRAME_SAMPLE_RATE
+from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR
 from utils.helpers import get_audio_filename, get_video_frame_filename
 
 class SaliencyScorer:
@@ -47,7 +47,6 @@ class SaliencyScorer:
             self.alpha_audio * audio_n 
         )
         return float(saliency)
-
 
 
 class SaliencyScorerService:
@@ -95,10 +94,11 @@ class SaliencyScorerService:
         return images
 
     def score_saliency(self, start_time, end_time, stream_id):
-        base_path= "./data/b39c2704-75b7-4b5c-be6d-dedc2a3b0d7b"
+        base_path= f"{BASE_DIR}/{stream_id}"
         audio = self.load_audio_segment(start_time, end_time, base_path=f"{base_path}/audio_chunks")
         frames = self.load_images(start_time, end_time, base_path=f"{base_path}/frames")
         return self.scorer.compute_saliency(frames, audio)
+    
     
 
 if __name__ == "__main__":

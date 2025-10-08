@@ -15,8 +15,9 @@ async def main():
     stream_id = f'{uuid.uuid4()}'
     start_time = time.time()
     # To signal async functions for stop
-    async_stop = asyncio.Event()
-    thread_stop = threading.Event()
+    stream_processor_event = threading.Event()
+    video_processor_event = asyncio.Event()
+    audio_processor_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
     audio_frame_q = UniqueAsyncQueue()
@@ -26,34 +27,35 @@ async def main():
     audio_processor = AudioProcessor(f"./data/{stream_id}/audio_chunks", audio_frame_q)
     audio_transcriber = AudioTranscriber()
 
-    stream_task = threading.Thread(target=stream_processor.start_stream, args=(thread_stop,), daemon=True)
+    stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
     stream_task.start()
 
     tasks = [
-        asyncio.create_task(video_processor.process_frames(stream_id, async_stop)),
-        asyncio.create_task(audio_processor.process_frames(stream_id, async_stop)),
+        asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
+        asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
         # asyncio.create_task(audio_transcriber.transcribe_audio(async_stop))
     ]
 
     def _signal_handler(signum, frame):
         print(f"Received signal {signum}; initiating shutdown.")
-        thread_stop.set()
-        loop.call_soon_threadsafe(async_stop.set)
+        stream_processor.set()
+        loop.call_soon_threadsafe(video_processor_event.set)
+        loop.call_soon_threadsafe(audio_processor_event.set)
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, _signal_handler)
 
     try:
         await asyncio.wait(
-            [asyncio.gather(*tasks), asyncio.shield(async_stop.wait())],
-            return_when=asyncio.FIRST_COMPLETED
+            [asyncio.gather(*tasks)],
+            return_when=asyncio.ALL_COMPLETED
         )
-        if async_stop.is_set():
+        if all([video_processor_event.is_set(), audio_processor_event.is_set()]):
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
     finally:
-        thread_stop.set()
+        stream_processor_event.set()
         print("Shutdown complete.")
         end_time = time.time()
         logger.info(f"Total time taken by pipeline is: {end_time-start_time}s", )
