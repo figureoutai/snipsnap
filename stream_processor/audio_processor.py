@@ -3,9 +3,15 @@ import av
 import time
 import asyncio
 import threading
-from utils.helpers import get_audio_filename
+
 from typing import List
 from av import AudioFrame
+from utils.helpers import get_audio_filename
+from av.audio.resampler import AudioResampler
+from repositories.s3_service import S3Service
+from utils.logger import app_logger as logger
+from repositories.aurora_service import AuroraService
+from utils.unique_async_queue import UniqueAsyncQueue
 from config import (
     AUDIO_BUCKET_PREFIX,
     DB_HOST,
@@ -18,11 +24,6 @@ from config import (
     TARGET_SAMPLE_RATE,
     AUDIO_METADATA_TABLE_NAME,
 )
-from utils.logger import app_logger as logger
-from av.audio.resampler import AudioResampler
-from utils.unique_async_queue import UniqueAsyncQueue
-from repositories.aurora_service import AuroraService
-from repositories.s3_service import S3Service
 
 
 class AudioChunker:
@@ -52,7 +53,6 @@ class AudioChunker:
         os.makedirs(self.output_dir, exist_ok=True)
 
     async def intialize_db_writer(self):
-
         if not self.is_db_writer_initialized:
             logger.info("Initializing DB Connection in AudioChunker")
             await self.db_writer.initialize()
@@ -117,8 +117,6 @@ class AudioChunker:
             # store metadata into Aurora SQL DB
             self.db_writer.insert_dict_nowait(AUDIO_METADATA_TABLE_NAME, metadata)
 
-            # save_audio_chunk(metadata)
-            # loop.call_soon_threadsafe(transcription_queue.put_nowait, self.chunk_index)
             logger.info(f"[AudioChunker] Wrote chunk {os.path.basename(filepath)}")
         except Exception as e:
             logger.error(f"[AudioChunker] Error writing chunk {e}")

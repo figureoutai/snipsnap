@@ -273,6 +273,58 @@ class AuroraService:
             results = await cursor.fetchall()
             return results
 
+    async def get_audios_by_stream(
+        self,
+        stream_id: str,
+        start_chunk: Optional[int] = None,
+        end_chunk: Optional[int] = None,
+        limit: Optional[int] = None,
+        order_by: str = "chunk_index ASC",
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve multiple video metadata records for a stream.
+
+        Args:
+            stream_id: The stream identifier
+            start_chunk: Optional starting frame index (inclusive)
+            end_chunk: Optional ending frame index (inclusive)
+            limit: Maximum number of records to return
+            order_by: Order clause (default: "frame_index ASC")
+
+        Returns:
+            List of dictionaries with video metadata
+        """
+        query = """
+            SELECT id, stream_id, filename, chunk_index, start_timestamp, end_timestamp
+                   sample_rate, transcript
+            FROM audio_metadata
+            WHERE stream_id = %s
+        """
+        params = [stream_id]
+
+        # Add frame range filters
+        if start_chunk is not None:
+            query += " AND chunk_index >= %s"
+            params.append(start_chunk)
+
+        if end_chunk is not None:
+            query += " AND chunk_index <= %s"
+            params.append(end_chunk)
+
+        # Add ordering
+        query += f" ORDER BY {order_by}"
+
+        # Add limit
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
+
+        async with self.get_connection() as cursor:
+            await cursor.execute(query, tuple(params))
+            results = await cursor.fetchall()
+            return results
+
+
     async def close(self):
         """Close the connection pool."""
         if self.pool:
