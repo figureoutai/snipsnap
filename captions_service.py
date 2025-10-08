@@ -4,6 +4,7 @@ from typing import List
 from llm.claude import Claude
 from asyncio import Event as AsyncEvent
 from candidate_clip import CandidateClip
+from utils.logger import app_logger as logger
 from utils.helpers import numpy_to_base64, run_sync_func
 from config import BASE_DIR, AUDIO_CHUNK, CANDIDATE_SLICE, VIDEO_FRAME_SAMPLE_RATE
 
@@ -23,6 +24,7 @@ class CaptionService:
         i = 0
         while True:
             if should_break:
+                logger.info("[CaptionService] exiting caption service.")
                 break
             start_time, end_time = self._get_slice(i)
             candidate_clip = CandidateClip(base_path, start_time, end_time)

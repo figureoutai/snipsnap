@@ -1,13 +1,10 @@
-import av
-import os
 import cv2
 import asyncio
 import librosa
 import numpy as np
 
-from utils.logger import app_logger as logger
 from candidate_clip import CandidateClip
-from utils.helpers import get_audio_filename, get_video_frame_filename
+from utils.logger import app_logger as logger
 from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
 
 
@@ -77,6 +74,7 @@ class SaliencyScorerService:
         i = 0
         while True:
             if should_break:
+                logger.info("[SaliencyScorerService] exiting saliency scorer service.")
                 break
             start_time, end_time = self._get_slice(i)
             candidate_clip = CandidateClip(base_path, start_time, end_time)
