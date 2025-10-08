@@ -3,11 +3,22 @@ import asyncio
 import librosa
 import numpy as np
 
+from typing import List
+from llm.claude import Claude
 from candidate_clip import CandidateClip
-from captions_service import CaptionService
-from utils.helpers import run_sync_func
 from utils.logger import app_logger as logger
+from utils.helpers import run_sync_func, numpy_to_base64
 from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
+
+class CaptionService:
+    def __init__(self):
+        self.llm = Claude()
+
+    async def generate_clip_caption(self, candidate_clip: CandidateClip, audio_metadata: List):
+        transcript = candidate_clip.get_transcript(audio_metadata)
+        images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
+        response = self.llm.invoke(prompt="", response_type="json", query=transcript, images=images, max_tokens=500)
+        return response["highlight_score"], response["caption"]
 
 
 class SaliencyScorer:
