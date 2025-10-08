@@ -7,12 +7,17 @@ requires-python = ">=3.12"
 dependencies = [
     "aiofiles>=24.1.0",
     "amazon-transcribe>=0.6.4",
+    "aioboto3>=15.2.0",
+    "aiomysql>=0.2.0",
+    "alembic>=1.16.5",
     "av>=15.1.0",
-    "boto3>=1.40.47",
+    "boto3>=1.40.15",
     "librosa>=0.11.0",
     "numpy>=2.3.3",
     "open-clip-torch>=3.2.0",
     "opencv-python>=4.11.0.86",
     "pillow>=11.3.0",
     "torch>=2.8.0",
+    "pymysql>=1.1.2",
+    "sqlalchemy>=2.0.43",
 ]
