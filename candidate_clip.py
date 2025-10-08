@@ -58,6 +58,6 @@ class CandidateClip:
             images.append(cv2.imread(filename=filepath))
         
         return images
-
-
     
+    def get_transcript(self, audio_metadata):
+        pass

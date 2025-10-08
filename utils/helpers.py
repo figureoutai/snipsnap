@@ -1,9 +1,12 @@
 import re
+import cv2
 import json
 import time
 import base64
+import asyncio
 import random
 import functools
+import numpy as np
 
 from logger import app_logger as logger
 
@@ -14,10 +17,13 @@ def get_audio_filename(idx: int):
 def get_video_frame_filename(idx: int):
     return f"frame_{idx:09d}.jpg"
 
+async def run_sync_func(func, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, func, *args, **kwargs)
+
 
 def save_audio(audio_frames, sr, layout, output_path="output.wav"):
     import av
-    import numpy as np
     # create output container
     output = av.open(output_path, mode='w')
     stream = output.add_stream('pcm_s16le', rate=sr)  # 16-bit PCM
@@ -39,6 +45,13 @@ def save_audio(audio_frames, sr, layout, output_path="output.wav"):
 def encode_image_to_base64(img_path):
     with open(img_path, "rb") as img:
         return base64.b64encode(img.read()).decode("utf-8")
+    
+def numpy_to_base64(img: np.ndarray, format: str = 'jpg') -> str:
+    success, buffer = cv2.imencode(f'.{format}', img)
+    if not success:
+        raise ValueError("Could not encode image.")
+    return base64.b64encode(buffer).decode('utf-8')
+
 
 def extract_json(text: str):
     """

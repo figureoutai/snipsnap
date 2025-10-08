@@ -83,9 +83,9 @@ class SaliencyScorerService:
             audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
 
             frame_metdata = [] # TODO: get frame metadata from aurora offset = start_time * VIDEO_FRAME_SAMPLE_RATE, limit = CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE
-            audio_metdata = [] # TODO: get audio metadata from aurora, for audio chunk indexes
+            audio_metadata = [] # TODO: get audio metadata from aurora, for audio chunk indexes
             
-            if len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE or len(audio_metdata) != len(audio_chunk_indexes):
+            if len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE or len(audio_metadata) != len(audio_chunk_indexes):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
                     should_break = True
                 else:
