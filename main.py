@@ -1,9 +1,11 @@
+import os
 import time
 import uuid
 import signal
 import asyncio
 import threading
 
+from config import BASE_DIR
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -13,6 +15,7 @@ from stream_processor.audio_processor import AudioProcessor
 
 async def main():
     stream_id = f'{uuid.uuid4()}'
+    stream_url = os.environ.get("STREAM_URL", default="./data/test_videos/apple.mp4")
     start_time = time.time()
     # To signal async functions for stop
     stream_processor_event = threading.Event()
@@ -22,9 +25,9 @@ async def main():
 
     audio_frame_q = UniqueAsyncQueue()
     video_frame_q = UniqueAsyncQueue()
-    stream_processor = StreamProcessor("./data/test_videos/apple.mp4", audio_frame_q, video_frame_q)
-    video_processor = VideoProcessor(f"./data/{stream_id}/frames", video_frame_q)
-    audio_processor = AudioProcessor(f"./data/{stream_id}/audio_chunks", audio_frame_q)
+    stream_processor = StreamProcessor(stream_url, audio_frame_q, video_frame_q)
+    video_processor = VideoProcessor(f"{BASE_DIR}/{stream_id}/frames", video_frame_q)
+    audio_processor = AudioProcessor(f"{BASE_DIR}/{stream_id}/audio_chunks", audio_frame_q)
     audio_transcriber = AudioTranscriber()
 
     stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
@@ -38,7 +41,7 @@ async def main():
 
     def _signal_handler(signum, frame):
         print(f"Received signal {signum}; initiating shutdown.")
-        stream_processor.set()
+        stream_processor_event.set()
         loop.call_soon_threadsafe(video_processor_event.set)
         loop.call_soon_threadsafe(audio_processor_event.set)
 
