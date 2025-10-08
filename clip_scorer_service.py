@@ -1,14 +1,24 @@
-import av
-import os
 import cv2
 import asyncio
 import librosa
 import numpy as np
 
-from utils.logger import app_logger as logger
+from typing import List
+from llm.claude import Claude
 from candidate_clip import CandidateClip
-from utils.helpers import get_audio_filename, get_video_frame_filename
+from utils.logger import app_logger as logger
+from utils.helpers import run_sync_func, numpy_to_base64
 from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
+
+class CaptionService:
+    def __init__(self):
+        self.llm = Claude()
+
+    async def generate_clip_caption(self, candidate_clip: CandidateClip, audio_metadata: List):
+        transcript = candidate_clip.get_transcript(audio_metadata)
+        images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
+        response = self.llm.invoke(prompt="", response_type="json", query=transcript, images=images, max_tokens=500)
+        return response["highlight_score"], response["caption"]
 
 
 class SaliencyScorer:
@@ -54,9 +64,10 @@ class SaliencyScorer:
         return float(saliency)
 
 
-class SaliencyScorerService:
+class ClipScorerService:
     def __init__(self):
         self.scorer = SaliencyScorer()
+        self.caption_service = CaptionService()
     
     def get_slice_saliency_score(self, candidate_clip: CandidateClip):
         audio = candidate_clip.load_audio_segment(AUDIO_CHUNK)
@@ -71,12 +82,13 @@ class SaliencyScorerService:
         else:
             return 0, 5
     
-    async def score_saliency(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
+    async def score_clips(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
         base_path = f"{BASE_DIR}/{stream_id}"
         should_break = False
         i = 0
         while True:
             if should_break:
+                logger.info("[SaliencyScorerService] exiting saliency scorer service.")
                 break
             start_time, end_time = self._get_slice(i)
             candidate_clip = CandidateClip(base_path, start_time, end_time)
@@ -93,20 +105,21 @@ class SaliencyScorerService:
                     continue
             
             score = self.get_slice_saliency_score(start_time, end_time, base_path)
+            highlight_score, caption = await run_sync_func(self.caption_service.generate_clip_caption, candidate_clip, audio_metadata)
             # TODO: store the data in saliency score table
             metadata = {
                 "stream_id": stream_id,
                 "start_time": start_time,
                 "end_time": end_time,
                 "saliency_score": score,
-                "caption": "",
-                "highlight_score": 0
+                "caption": caption,
+                "highlight_score": highlight_score
             }
             i += 1
 
 
 if __name__ == "__main__":
-    scorer = SaliencyScorerService()
+    scorer = ClipScorerService()
     for i in range(0, 25):
         start = i * 5
         end = start + 5
