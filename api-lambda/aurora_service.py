@@ -6,6 +6,7 @@ from typing import Dict, List, Any, Optional
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class AuroraService:
 

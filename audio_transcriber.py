@@ -6,7 +6,7 @@ import aiofiles
 from asyncio import Event
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from config import AUDIO_CHUNK_DIR, AWS_REGION, LANGUAGE_CODE, AUDIO_METADATA_TABLE_NAME
+from config import AWS_REGION, LANGUAGE_CODE, AUDIO_METADATA_TABLE_NAME
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
 from amazon_transcribe.model import TranscriptEvent, StartStreamTranscriptionEventStream
@@ -50,8 +50,9 @@ class TranscriptEventHandler(TranscriptResultStreamHandler):
 
 
 class AudioTranscriber:
-    def __init__(self):
+    def __init__(self, audio_chunk_dir: str):
         self.client = TranscribeStreamingClient(region=AWS_REGION)
+        self.chunk_dir = audio_chunk_dir
         self.is_db_reader_initialized = False
         self.db_reader = AuroraService(pool_size=10)
 
@@ -74,7 +75,7 @@ class AudioTranscriber:
                 break
 
             for chunk in audio_chunks:
-                filepath = os.path.join(AUDIO_CHUNK_DIR, chunk["filename"])
+                filepath = os.path.join(self.chunk_dir, chunk["filename"])
                 sample_rate = chunk["sample_rate"]
                 stream_id = chunk["stream_id"]
                 transcription_stream = await self.client.start_stream_transcription(

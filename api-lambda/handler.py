@@ -7,9 +7,13 @@ import boto3
 from aurora_service import AuroraService
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 sqs = boto3.client("sqs")
 QUEUE_URL = os.environ["QUEUE_URL"]
+SECRET_NAME = os.environ["SECRET_NAME"]
+DB_URL = os.environ["DB_URL"]
+
 
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
     # Create a Secrets Manager client
@@ -45,10 +49,10 @@ def video_receiver(event, context):
 
         message = body.get("message", "hello from lambda 👋")
 
-        secrets = get_secret("rds!cluster-d28aeadb-5f1e-4e2f-a4b7-0c5c06087d72")
+        secrets = get_secret(SECRET_NAME)
 
         db_service = AuroraService(
-            host="database-1.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com",
+            host=DB_URL,
             user=secrets["username"],
             password=secrets["password"],
             database="strangedb",

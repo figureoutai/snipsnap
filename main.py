@@ -38,7 +38,7 @@ async def main():
     stream_processor = StreamProcessor(stream_url, audio_frame_q, video_frame_q)
     video_processor = VideoProcessor(f"{BASE_DIR}/{stream_id}/frames", video_frame_q)
     audio_processor = AudioProcessor(f"{BASE_DIR}/{stream_id}/audio_chunks", audio_frame_q)
-    audio_transcriber = AudioTranscriber()
+    audio_transcriber = AudioTranscriber(f"{BASE_DIR}/{stream_id}/audio_chunks")
     clip_scorer = ClipScorerService()
 
     stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)

@@ -14,6 +14,8 @@ provider:
 
   environment:
     QUEUE_URL: https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025
+    SECRET_NAME: rds!cluster-709bbecc-8432-4da5-8727-aafbf13556e3
+    DB_URL: database-2.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -23,7 +25,7 @@ provider:
       Action:
         - secretsmanager:GetSecretValue
         - secretsmanager:DescribeSecret
-      Resource: arn:aws:secretsmanager:us-east-1:975049899047:secret:rds!cluster-d28aeadb-5f1e-4e2f-a4b7-0c5c06087d72-9wPQ27
+      Resource: arn:aws:secretsmanager:us-east-1:975049899047:secret:rds!cluster-709bbecc-8432-4da5-8727-aafbf13556e3-c6E7hE
 
 functions:
   videoReceiver:
@@ -37,11 +39,22 @@ functions:
 
 package:
   patterns:
-    - handler.py
+    - "!node_modules/**"
+    - "!__pycache__/**"
+    - "**/*.py"
+    - "requirements.txt"
 
 plugins:
+  - serverless-python-requirements
   - serverless-offline
 
 custom:
+  pythonRequirements:
+    fileName: requirements.txt
+    usePoetry: false
+    layer: false # (set true if you prefer a layer)
+    dockerizePip: non-linux
+    slim: false # remove tests/docs to shrink size
+    invalidateCaches: true # bust cache if you’re fighting stale wheels
   serverless-offline:
     httpPort: 3000
