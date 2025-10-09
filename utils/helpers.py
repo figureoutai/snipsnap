@@ -8,7 +8,7 @@ import random
 import functools
 import numpy as np
 
-from logger import app_logger as logger
+from .logger import app_logger as logger
 
 EMPTY_STRING = "EMPTY"
 

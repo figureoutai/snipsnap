@@ -14,7 +14,6 @@ dependencies = [
     "boto3>=1.40.15",
     "librosa>=0.11.0",
     "numpy>=2.3.3",
-    "open-clip-torch>=3.2.0",
     "opencv-python>=4.11.0.86",
     "pillow>=11.3.0",
     "torch>=2.8.0",

@@ -2,7 +2,7 @@ import json
 import boto3
 
 from typing import List
-from base_llm import LLM
+from .base_llm import LLM
 from botocore.config import Config
 from utils.logger import app_logger as logger
 from utils.helpers import encode_image_to_base64, extract_json, retry_with_backoff
@@ -20,10 +20,12 @@ class Claude(LLM):
                 "role": "user", 
                 "content": [
                     {"type": "text", "text": query},
-                    {
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": "image/jpeg", "data": img}
-                    } for img in images
+                    *[
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/jpeg", "data": img}
+                        } for img in images
+                    ]
                 ]
             }
         ]
