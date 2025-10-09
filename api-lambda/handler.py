@@ -11,6 +11,26 @@ logger = logging.getLogger(__name__)
 sqs = boto3.client("sqs")
 QUEUE_URL = os.environ["QUEUE_URL"]
 
+def get_secret(secret_name: str, region_name: str = "us-east-1"):
+    # Create a Secrets Manager client
+    client = boto3.client("secretsmanager", region_name=region_name)
+
+    try:
+        # Get the secret value
+        response = client.get_secret_value(SecretId=secret_name)
+
+        # The secret can be either a string or binary
+        if "SecretString" in response:
+            secret = response["SecretString"]
+            return json.loads(secret)  # Parse JSON string if applicable
+        else:
+            # Decode binary secret
+            secret = response["SecretBinary"]
+            return secret.decode("utf-8")
+
+    except Exception as e:
+        logger.error(f"❌ The requested secret {secret_name} was not found")
+
 def video_receiver(event, context):
     """
     Expects:
@@ -25,10 +45,12 @@ def video_receiver(event, context):
 
         message = body.get("message", "hello from lambda 👋")
 
+        secrets = get_secret("rds!cluster-d28aeadb-5f1e-4e2f-a4b7-0c5c06087d72")
+
         db_service = AuroraService(
             host="database-1.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com",
-            user="<username>",
-            password="<password>",
+            user=secrets["username"],
+            password=secrets["password"],
             database="strangedb",
         )
 

@@ -14,11 +14,7 @@ from config import (
     BASE_DIR, 
     CANDIDATE_SLICE, 
     STEP_BACK,
-    AUDIO_CHUNK, 
-    DB_HOST,
-    DB_NAME,
-    DB_PASSWORD,
-    DB_USER,
+    AUDIO_CHUNK,
     SCORE_METADATA_TABLE
 )
 
@@ -81,13 +77,7 @@ class ClipScorerService:
         self.scorer = SaliencyScorer()
         self.caption_service = CaptionService()
         self.is_db_service_initialized = False
-        self.db_service = AuroraService(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            pool_size=10,
-        )
+        self.db_service = AuroraService(pool_size=10)
 
     async def intialize_db_service(self):
         if not self.is_db_service_initialized:

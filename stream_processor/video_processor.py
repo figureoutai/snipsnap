@@ -9,7 +9,7 @@ from utils.helpers import get_video_frame_filename
 from utils.unique_async_queue import UniqueAsyncQueue
 from repositories.aurora_service import AuroraService
 from repositories.s3_service import S3Service
-from config import AUDIO_BUCKET_PREFIX, DB_HOST, DB_NAME, DB_PASSWORD, DB_USER, IMAGE_BUCKET_PREFIX, S3_BUCKET_NAME, S3_REGION, VIDEO_METADATA_TABLE_NAME
+from config import AUDIO_BUCKET_PREFIX, IMAGE_BUCKET_PREFIX, S3_BUCKET_NAME, S3_REGION, VIDEO_METADATA_TABLE_NAME
 
 class VideoProcessor:
     def __init__(
@@ -27,13 +27,7 @@ class VideoProcessor:
         
         self.is_db_writer_initialized = False
         
-        self.db_writer = AuroraService(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            pool_size=10,
-        )
+        self.db_writer = AuroraService(pool_size=10)
 
         self.s3_writer = S3Service(
             bucket_name=S3_BUCKET_NAME,

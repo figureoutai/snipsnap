@@ -1,28 +1,23 @@
 import asyncio
 import aiomysql
 
-from config import DB_PORT
-from typing import Dict, List, Any, Optional
+from utils.helpers import get_secret
 from contextlib import asynccontextmanager
+from typing import Dict, List, Any, Optional
 from utils.logger import app_logger as logger
+from config import DB_PORT, DB_HOST, DB_NAME, DB_SECRET_NAME, AWS_REGION
+
 
 
 class AuroraService:
 
-    def __init__(
-        self,
-        host: str,
-        user: str,
-        password: str,
-        database: str,
-        port: int = DB_PORT,
-        pool_size: int = 10,
-    ):
-        self.host = host
-        self.user = user
-        self.password = password
-        self.database = database
-        self.port = port
+    def __init__(self, pool_size: int = 10):
+        self.host = DB_HOST
+        self.database = DB_NAME
+        self.port = DB_PORT
+        secrets = get_secret(DB_SECRET_NAME, AWS_REGION)
+        self.user = secrets["username"]
+        self.password = secrets["password"]
         self.pool_size = pool_size
         self.pool = None
 

@@ -15,7 +15,7 @@ from stream_processor.audio_processor import AudioProcessor
 from clip_scorer_service import ClipScorerService
 
 async def main():
-    stream_id = f'{uuid.uuid4()}'
+    stream_id = os.environ.get("STREAM_ID", default=f'{uuid.uuid4()}')
     stream_url = os.environ.get("STREAM_URL", default="./data/test_videos/apple.mp4")
     start_time = time.time()
     # To signal async functions for stop

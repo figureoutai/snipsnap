@@ -6,7 +6,7 @@ import aiofiles
 from asyncio import Event
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from config import AUDIO_CHUNK_DIR, AWS_REGION, LANGUAGE_CODE, DB_HOST, DB_NAME, DB_PASSWORD, DB_USER, AUDIO_METADATA_TABLE_NAME
+from config import AUDIO_CHUNK_DIR, AWS_REGION, LANGUAGE_CODE, AUDIO_METADATA_TABLE_NAME
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
 from amazon_transcribe.model import TranscriptEvent, StartStreamTranscriptionEventStream
@@ -19,13 +19,7 @@ class TranscriptEventHandler(TranscriptResultStreamHandler):
         self.filename = filename
         self.stream_id = stream_id
         self.is_db_writer_initialized = False
-        self.db_writer = AuroraService(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            pool_size=10,
-        )
+        self.db_writer = AuroraService(pool_size=10)
     
     async def intialize_db_writer(self):
         if not self.is_db_writer_initialized:
@@ -59,13 +53,7 @@ class AudioTranscriber:
     def __init__(self):
         self.client = TranscribeStreamingClient(region=AWS_REGION)
         self.is_db_reader_initialized = False
-        self.db_reader = AuroraService(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            pool_size=10,
-        )
+        self.db_reader = AuroraService(pool_size=10)
 
     async def intialize_db_reader(self):
         if not self.is_db_reader_initialized:

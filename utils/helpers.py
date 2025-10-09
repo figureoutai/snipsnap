@@ -2,6 +2,7 @@ import re
 import cv2
 import json
 import time
+import boto3
 import base64
 import asyncio
 import random
@@ -11,7 +12,6 @@ import numpy as np
 from .logger import app_logger as logger
 
 EMPTY_STRING = "EMPTY"
-
 
 def get_audio_filename(idx: int):
     return f"audio_{idx:06d}.wav"
@@ -136,3 +136,24 @@ def retry_with_backoff(
                         delay *= 2  # Exponential backoff
         return wrapper
     return decorator
+
+
+def get_secret(secret_name: str, region_name: str = "us-east-1"):
+    # Create a Secrets Manager client
+    client = boto3.client("secretsmanager", region_name=region_name)
+
+    try:
+        # Get the secret value
+        response = client.get_secret_value(SecretId=secret_name)
+
+        # The secret can be either a string or binary
+        if "SecretString" in response:
+            secret = response["SecretString"]
+            return json.loads(secret)  # Parse JSON string if applicable
+        else:
+            # Decode binary secret
+            secret = response["SecretBinary"]
+            return secret.decode("utf-8")
+
+    except Exception as e:
+        logger.error(f"The requested secret {secret_name} was not found")
