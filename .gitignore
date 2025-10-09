@@ -20,3 +20,4 @@ data/**/new_chunks
 # VSCode settings
 .vscode
 node_modules/
+.serverless/

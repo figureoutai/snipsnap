@@ -1,6 +1,10 @@
 import json
+import logging
 import os
+
 import boto3
+
+logger = logging.getLogger(__name__)
 
 sqs = boto3.client("sqs")
 QUEUE_URL = os.environ["QUEUE_URL"]
@@ -19,10 +23,14 @@ def video_receiver(event, context):
 
         message = body.get("message", "hello from lambda 👋")
 
-        sqs.send_message(
-            QueueUrl=QUEUE_URL,
-            MessageBody= message if isinstance(message, str) else json.dumps(message),
-        )
+        try:
+            sqs.send_message(
+                QueueUrl=QUEUE_URL,
+                MessageBody=message if isinstance(message, str) else json.dumps(message),
+            )
+        except Exception as sqs_error:
+            logger.exception("Failed to post message to SQS: %s", sqs_error)
+            raise
 
         resp = {"ok": True, "queued": message}
         return {
@@ -32,6 +40,7 @@ def video_receiver(event, context):
         }
 
     except Exception as e:
+        logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json"},
