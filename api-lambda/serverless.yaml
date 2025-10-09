@@ -1,0 +1,40 @@
+service: aws-hackathon-2025-lambda-service
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  environment:
+    QUEUE_URL: https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource: arn:aws:sqs:us-east-1:975049899047:sqs-hackathon-2025
+    - Effect: Allow
+      Action:
+        - secretsmanager:GetSecretValue
+        - secretsmanager:DescribeSecret
+      Resource: arn:aws:secretsmanager:us-east-1:975049899047:secret:rds!cluster-2740ad61-e3f9-4bf4-9cce-ed1d7892da71-RSIozu
+
+functions:
+  videoReceiver:
+    handler: handler.video_receiver
+    memorySize: 128
+    timeout: 30
+    events:
+      - httpApi:
+          method: POST
+          path: /video-url
+
+package:
+  patterns:
+    - handler.py
+
+plugins:
+  - serverless-offline
+
+custom:
+  serverless-offline:
+    httpPort: 3000

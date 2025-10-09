@@ -21,3 +21,4 @@ data/**/new_chunks
 .vscode
 
 .env
+node_modules/
