@@ -1,11 +1,12 @@
-import os
 import time
 import uuid
+import json
 import signal
 import asyncio
 import threading
 
-from config import BASE_DIR
+from config import BASE_DIR, SQS_URL
+from sqs_service import SQSService
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from utils.unique_async_queue import UniqueAsyncQueue
@@ -14,9 +15,17 @@ from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
 from clip_scorer_service import ClipScorerService
 
+def get_parameters_from_sqs(sqs_service: SQSService):
+    messages = sqs_service.receive_message(1)
+    body = json.loads(messages[0]["Body"])
+    sqs_service.delete_message(messages[0]["ReceiptHandle"])
+    return body
+
 async def main():
-    stream_id = os.environ.get("STREAM_ID", default=f'{uuid.uuid4()}')
-    stream_url = os.environ.get("STREAM_URL", default="./data/test_videos/apple.mp4")
+    sqs_service = SQSService(queue_url=SQS_URL)
+    params = get_parameters_from_sqs(sqs_service)
+    stream_id = params["stream_id"] if params["stream_id"] else f"{uuid.uuid4()}"
+    stream_url = params["stream_url"] if params["stream_url"] else "./data/test_videos/news.mp4"
     start_time = time.time()
     # To signal async functions for stop
     stream_processor_event = threading.Event()
@@ -39,7 +48,7 @@ async def main():
         asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
         asyncio.create_task(audio_transcriber.transcribe_audio(stream_id, audio_processor_event)),
-        clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event),
+        asyncio.create_task(clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event)),
     ]
 
     def _signal_handler(signum, frame):

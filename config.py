@@ -3,6 +3,7 @@ LANGUAGE_CODE="en"
 
 S3_BUCKET_NAME = "clip-highlights-bucket"
 S3_REGION = "us-east-1"
+SQS_URL = "https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025"
 IMAGE_BUCKET_PREFIX = "images/frame/"
 AUDIO_BUCKET_PREFIX = "audio/streams/"
 

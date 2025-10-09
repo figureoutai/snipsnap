@@ -40,3 +40,6 @@ node_modules/
 *.png
 *.md
 *.ini
+
+# server api 
+api-lambda/
