@@ -6,12 +6,12 @@ import threading
 
 from typing import List
 from av import AudioFrame
-from utils.helpers import get_audio_filename
 from av.audio.resampler import AudioResampler
 from repositories.s3_service import S3Service
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
 from utils.unique_async_queue import UniqueAsyncQueue
+from utils.helpers import get_audio_filename, EMPTY_STRING
 from config import (
     AUDIO_BUCKET_PREFIX,
     DB_HOST,
@@ -108,7 +108,7 @@ class AudioChunker:
                 "end_timestamp": round(end_ts, 3) if end_ts else None,
                 "sample_rate": sample_rate,
                 "captured_at": round(time.time()),
-                "transcript": "", 
+                "transcript": EMPTY_STRING, 
             }
                         
             # upload audio clip to S3 bucket

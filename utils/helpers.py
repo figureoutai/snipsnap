@@ -10,6 +10,8 @@ import numpy as np
 
 from logger import app_logger as logger
 
+EMPTY_STRING = "EMPTY"
+
 
 def get_audio_filename(idx: int):
     return f"audio_{idx:06d}.wav"

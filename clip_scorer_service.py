@@ -8,7 +8,7 @@ from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from utils.helpers import run_sync_func, numpy_to_base64
+from utils.helpers import run_sync_func, numpy_to_base64, EMPTY_STRING
 from config import (
     VIDEO_FRAME_SAMPLE_RATE, 
     BASE_DIR, 
@@ -121,11 +121,6 @@ class ClipScorerService:
             candidate_clip = CandidateClip(base_path, start_time, end_time)
             audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
 
-            frame_metdata = await self.db_service.get_videos_by_stream(
-                stream_id=stream_id, 
-                start_frame=start_time*VIDEO_FRAME_SAMPLE_RATE,
-                limit=CANDIDATE_SLICE*VIDEO_FRAME_SAMPLE_RATE
-            )
             audio_metadata = []
             if len(audio_chunk_indexes) == 1:
                 audio_metadata = await self.db_service.get_audios_by_stream(
@@ -139,6 +134,16 @@ class ClipScorerService:
                     start_chunk=audio_chunk_indexes[0],
                     end_chunk=audio_chunk_indexes[1]
                 )
+
+            if not all([meta["transcript"] != EMPTY_STRING for meta in audio_metadata]):
+                await asyncio.sleep(0.5)
+                continue
+
+            frame_metdata = await self.db_service.get_videos_by_stream(
+                stream_id=stream_id, 
+                start_frame=start_time*VIDEO_FRAME_SAMPLE_RATE,
+                limit=CANDIDATE_SLICE*VIDEO_FRAME_SAMPLE_RATE
+            )       
             
             if len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE or len(audio_metadata) != len(audio_chunk_indexes):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
