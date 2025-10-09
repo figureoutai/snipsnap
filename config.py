@@ -10,6 +10,7 @@ AUDIO_BUCKET_PREFIX = "audio/streams/"
 DB_NAME="clip_metadata"
 VIDEO_METADATA_TABLE_NAME = "video_metadata"
 AUDIO_METADATA_TABLE_NAME = "audio_metadata"
+SCORE_METADATA_TABLE = "score_metadata"
 
 DB_HOST = "clip-highlights-instance-1.cdgkfoacvf6u.us-east-1.rds.amazonaws.com"
 DB_USER = "admin"

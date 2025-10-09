@@ -73,16 +73,17 @@ class AudioTranscriber:
             await self.db_reader.initialize()
             self.is_db_reader_initialized = True
 
-    async def transcribe_audio(self, stream_id, stop_event: Event):
+    async def transcribe_audio(self, stream_id, audio_processor_event: Event):
         await self.intialize_db_reader()
+        start_chunk = 0
+        
         while True:
-            if stop_event.is_set():
-                break
-            
-            start_chunk = 0
             audio_chunks = await self.db_reader.get_audios_by_stream(
                 stream_id=stream_id, start_chunk=start_chunk, limit=10
             )
+
+            if len(audio_chunks) == 0 and audio_processor_event.is_set():
+                break
 
             for chunk in audio_chunks:
                 filepath = os.path.join(AUDIO_CHUNK_DIR, chunk["filename"])

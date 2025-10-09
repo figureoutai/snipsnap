@@ -7,8 +7,20 @@ from typing import List
 from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
+from repositories.aurora_service import AuroraService
 from utils.helpers import run_sync_func, numpy_to_base64
-from config import VIDEO_FRAME_SAMPLE_RATE, BASE_DIR, CANDIDATE_SLICE, STEP_BACK, AUDIO_CHUNK
+from config import (
+    VIDEO_FRAME_SAMPLE_RATE, 
+    BASE_DIR, 
+    CANDIDATE_SLICE, 
+    STEP_BACK,
+    AUDIO_CHUNK, 
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_USER,
+    SCORE_METADATA_TABLE
+)
 
 class CaptionService:
     def __init__(self):
@@ -68,6 +80,20 @@ class ClipScorerService:
     def __init__(self):
         self.scorer = SaliencyScorer()
         self.caption_service = CaptionService()
+        self.is_db_service_initialized = False
+        self.db_service = AuroraService(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            pool_size=10,
+        )
+
+    async def intialize_db_service(self):
+        if not self.is_db_service_initialized:
+            logger.info("[AudioTranscriber] Initializing DB Connection")
+            await self.db_service.initialize()
+            self.is_db_service_initialized = True
     
     def get_slice_saliency_score(self, candidate_clip: CandidateClip):
         audio = candidate_clip.load_audio_segment(AUDIO_CHUNK)
@@ -86,6 +112,7 @@ class ClipScorerService:
         base_path = f"{BASE_DIR}/{stream_id}"
         should_break = False
         i = 0
+        await self.intialize_db_service()
         while True:
             if should_break:
                 logger.info("[SaliencyScorerService] exiting saliency scorer service.")
@@ -94,8 +121,24 @@ class ClipScorerService:
             candidate_clip = CandidateClip(base_path, start_time, end_time)
             audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
 
-            frame_metdata = [] # TODO: get frame metadata from aurora offset = start_time * VIDEO_FRAME_SAMPLE_RATE, limit = CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE
-            audio_metadata = [] # TODO: get audio metadata from aurora, for audio chunk indexes
+            frame_metdata = await self.db_service.get_videos_by_stream(
+                stream_id=stream_id, 
+                start_frame=start_time*VIDEO_FRAME_SAMPLE_RATE,
+                limit=CANDIDATE_SLICE*VIDEO_FRAME_SAMPLE_RATE
+            )
+            audio_metadata = []
+            if len(audio_chunk_indexes) == 1:
+                audio_metadata = await self.db_service.get_audios_by_stream(
+                    stream_id=stream_id,
+                    start_chunk=audio_chunk_indexes[0],
+                    limit=1
+                )
+            else:
+                audio_metadata = await self.db_service.get_audios_by_stream(
+                    stream_id=stream_id,
+                    start_chunk=audio_chunk_indexes[0],
+                    end_chunk=audio_chunk_indexes[1]
+                )
             
             if len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE or len(audio_metadata) != len(audio_chunk_indexes):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
@@ -106,7 +149,6 @@ class ClipScorerService:
             
             score = self.get_slice_saliency_score(start_time, end_time, base_path)
             highlight_score, caption = await run_sync_func(self.caption_service.generate_clip_caption, candidate_clip, audio_metadata)
-            # TODO: store the data in saliency score table
             metadata = {
                 "stream_id": stream_id,
                 "start_time": start_time,
@@ -115,6 +157,7 @@ class ClipScorerService:
                 "caption": caption,
                 "highlight_score": highlight_score
             }
+            await self.db_service.insert_dict(SCORE_METADATA_TABLE, metadata)
             i += 1
 
 

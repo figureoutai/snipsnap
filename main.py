@@ -38,7 +38,7 @@ async def main():
     tasks = [
         asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
-        # asyncio.create_task(audio_transcriber.transcribe_audio(async_stop)),
+        asyncio.create_task(audio_transcriber.transcribe_audio(stream_id, audio_processor_event)),
         # clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event),
     ]
 
