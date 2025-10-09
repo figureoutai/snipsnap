@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, BigInteger, Float, DateTime, Index
+from sqlalchemy import Column, String, Integer, BigInteger, Float, DateTime, Index, Text
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -6,8 +6,8 @@ Base = declarative_base()
 
 
 class VideoMetadata(Base):
-    __tablename__ = 'video_metadata'
-    
+    __tablename__ = "video_metadata"
+
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     stream_id = Column(String(255), nullable=False, index=True)
     filename = Column(String(512), nullable=False)
@@ -17,18 +17,18 @@ class VideoMetadata(Base):
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+
     # Composite indexes for common queries
     __table_args__ = (
-        Index('idx_stream_frame', 'stream_id', 'frame_index'),
-        Index('idx_stream_timestamp', 'stream_id', 'timestamp'),
-        Index('idx_filename', 'filename'),
+        Index("idx_stream_frame", "stream_id", "frame_index"),
+        Index("idx_stream_timestamp", "stream_id", "timestamp"),
+        Index("idx_filename", "filename"),
     )
 
 
 class AudioMetadata(Base):
-    __tablename__ = 'audio_metadata'
-    
+    __tablename__ = "audio_metadata"
+
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     stream_id = Column(String(255), nullable=False, index=True)
     filename = Column(String(512), nullable=False)
@@ -38,10 +38,35 @@ class AudioMetadata(Base):
     sample_rate = Column(Integer, nullable=True)
     captured_at = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+    transcript = Column(Text, nullable=True)
+
     # Composite indexes for common queries
     __table_args__ = (
-        Index('idx_stream_chunk', 'stream_id', 'chunk_index'),
-        Index('idx_stream_timestamps', 'stream_id', 'start_timestamp', 'end_timestamp'),
-        Index('idx_filename', 'filename'),
+        Index("idx_stream_chunk", "stream_id", "chunk_index"),
+        Index("idx_stream_timestamps", "stream_id", "start_timestamp", "end_timestamp"),
+        Index("idx_filename", "filename"),
+    )
+
+
+class Highlight(Base):
+    __tablename__ = "highlights"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    stream_id = Column(String(255), nullable=False, index=True)
+    start_time = Column(Float, nullable=False)
+    end_time = Column(Float, nullable=False)
+    saliency_score = Column(Float, nullable=True)
+    caption = Column(Text, nullable=True)
+    highlight_score = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Composite indexes for common queries
+    __table_args__ = (
+        Index("idx_stream_time", "stream_id", "start_time", "end_time"),
+        Index("idx_stream_highlight_score", "stream_id", "highlight_score"),
+        Index("idx_highlight_score", "highlight_score"),
+        Index("idx_saliency_score", "saliency_score"),
     )
