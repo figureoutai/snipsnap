@@ -42,7 +42,6 @@ def upgrade() -> None:
         sa.Column('end_timestamp', sa.Float(), nullable=True),
         sa.Column('sample_rate', sa.Integer(), nullable=True),
         sa.Column('captured_at', sa.BigInteger(), nullable=True),
-        sa.Column('transcript', sa.VARCHAR(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.PrimaryKeyConstraint('id')
     )
