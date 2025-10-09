@@ -1,0 +1,9 @@
+aiomysql==0.2.0
+boto3==1.40.48
+botocore==1.40.48
+jmespath==1.0.1
+PyMySQL==1.1.2
+python-dateutil==2.9.0.post0
+s3transfer==0.14.0
+six==1.17.0
+urllib3==2.5.0

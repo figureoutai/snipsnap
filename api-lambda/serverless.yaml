@@ -1,5 +1,5 @@
 service: aws-hackathon-2025-lambda-service
-frameworkVersion: '3'
+frameworkVersion: "3"
 
 provider:
   name: aws
@@ -23,7 +23,7 @@ provider:
       Action:
         - secretsmanager:GetSecretValue
         - secretsmanager:DescribeSecret
-      Resource: arn:aws:secretsmanager:us-east-1:975049899047:secret:rds!cluster-2740ad61-e3f9-4bf4-9cce-ed1d7892da71-RSIozu
+      Resource: arn:aws:secretsmanager:us-east-1:975049899047:secret:rds!cluster-d28aeadb-5f1e-4e2f-a4b7-0c5c06087d72-9wPQ27
 
 functions:
   videoReceiver:

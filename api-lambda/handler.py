@@ -1,8 +1,10 @@
 import json
 import logging
 import os
+import asyncio
 
 import boto3
+from aurora_service import AuroraService
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,15 @@ def video_receiver(event, context):
             body = json.loads(body or "{}")
 
         message = body.get("message", "hello from lambda 👋")
+
+        db_service = AuroraService(
+            host="database-1.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com",
+            user="<username>",
+            password="<password>",
+            database="strangedb",
+        )
+
+        asyncio.run(db_service.initialize())
 
         try:
             sqs.send_message(
