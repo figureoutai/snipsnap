@@ -21,3 +21,5 @@ data/**/new_chunks
 .vscode
 node_modules/
 .serverless/
+.env
+
