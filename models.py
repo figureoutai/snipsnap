@@ -49,7 +49,7 @@ class AudioMetadata(Base):
 
 
 class Highlight(Base):
-    __tablename__ = "highlights"
+    __tablename__ = "score_metadata"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     stream_id = Column(String(255), nullable=False, index=True)
