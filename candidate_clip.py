@@ -1,6 +1,7 @@
 import av
 import os
 import cv2
+import json
 import numpy as np
 
 from config import VIDEO_FRAME_SAMPLE_RATE
@@ -60,4 +61,13 @@ class CandidateClip:
         return images
     
     def get_transcript(self, audio_metadata):
-        pass
+        words = []
+        for meta in audio_metadata:
+            start_timestamp = 0 if not meta["start_timestamp"] else meta["start_timestamp"]
+            for item in json.loads(meta["transcript"]):
+                if self.start_time <= item["start_time"] + start_timestamp and self.end_time >= item["end_time"]:
+                    if item['type'] != 'pronunciation':
+                        continue
+                    words.append(item['content'])
+        
+        return ' '.join(words) 
