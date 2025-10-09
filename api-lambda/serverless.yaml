@@ -5,6 +5,13 @@ provider:
   name: aws
   runtime: python3.11
   region: us-east-1
+  vpc:
+    securityGroupIds:
+      - sg-00a657f7937fec983
+    subnetIds:
+      - subnet-0794c881d326871ea
+      - subnet-0a08f6e41e4896b2e
+
   environment:
     QUEUE_URL: https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025
   iamRoleStatements:
@@ -22,7 +29,7 @@ functions:
   videoReceiver:
     handler: handler.video_receiver
     memorySize: 128
-    timeout: 30
+    timeout: 29
     events:
       - httpApi:
           method: POST
