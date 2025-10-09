@@ -2,8 +2,10 @@ import av
 
 from threading import Event
 from av.stream import Disposition
+from config import MAX_STREAM_DURATION
 from utils.logger import app_logger as logger
 from utils.unique_async_queue import UniqueAsyncQueue
+
 
 class StreamProcessor:
     def __init__(self, url: str, audio_frame_q: UniqueAsyncQueue, video_frame_q: UniqueAsyncQueue):
@@ -12,6 +14,7 @@ class StreamProcessor:
         self.audio_frame_q = audio_frame_q
         self.video_frame_q = video_frame_q
         self.stream_url = url
+        self.max_seconds = MAX_STREAM_DURATION
 
     def start_stream(self, stream_processor_event: Event):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
@@ -36,6 +39,13 @@ class StreamProcessor:
                         break
                     try:
                         for frame in packet.decode():
+                            if frame is None:
+                                continue
+                            if self.max_seconds is not None and frame.pts:
+                                media_time = float(frame.pts * frame.time_base)
+                                if media_time > self.max_seconds:
+                                    stream_processor_event.set()
+                                    return
                             if packet.stream.type == "video":
                                 self.video_frame_q.put_nowait(frame)
                             elif packet.stream.type == "audio":
