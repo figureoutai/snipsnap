@@ -1,5 +1,7 @@
 import asyncio
 import aiomysql
+
+from config import DB_PORT
 from typing import Dict, List, Any, Optional
 from contextlib import asynccontextmanager
 from utils.logger import app_logger as logger
@@ -13,7 +15,7 @@ class AuroraService:
         user: str,
         password: str,
         database: str,
-        port: int = 3306,
+        port: int = DB_PORT,
         pool_size: int = 10,
     ):
         self.host = host

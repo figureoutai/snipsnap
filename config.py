@@ -15,6 +15,7 @@ SCORE_METADATA_TABLE = "score_metadata"
 DB_HOST = "clip-highlights-instance-1.cdgkfoacvf6u.us-east-1.rds.amazonaws.com"
 DB_USER = "admin"
 DB_PASSWORD = "<admin-password>"
+DB_PORT = 3306
 
 # AUDIO CONFIGURATION
 TARGET_SAMPLE_RATE = 16000
