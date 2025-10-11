@@ -15,6 +15,8 @@ SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 
 
+print("version 2")
+
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
     # Create a Secrets Manager client
     client = boto3.client("secretsmanager", region_name=region_name)
@@ -48,6 +50,9 @@ def video_receiver(event, context):
             body = json.loads(body or "{}")
 
         message = body.get("message", "hello from lambda 👋")
+        
+        logger.info("Received message: %s", message)
+        logger.info("connecting to db")
 
         secrets = get_secret(SECRET_NAME)
 
@@ -59,6 +64,8 @@ def video_receiver(event, context):
         )
 
         asyncio.run(db_service.initialize())
+
+        logger.info("successfully connected to db")
 
         try:
             sqs.send_message(

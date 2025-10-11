@@ -16,7 +16,7 @@ class AuroraService:
         user: str,
         password: str,
         database: str,
-        port: int = 5432,
+        port: int = 3306,
         pool_size: int = 10,
     ):
         self.host = host

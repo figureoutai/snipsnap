@@ -11,7 +11,6 @@ provider:
     subnetIds:
       - subnet-0794c881d326871ea
       - subnet-0a08f6e41e4896b2e
-
   environment:
     QUEUE_URL: https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025
     SECRET_NAME: rds!cluster-709bbecc-8432-4da5-8727-aafbf13556e3
@@ -56,5 +55,6 @@ custom:
     dockerizePip: non-linux
     slim: false # remove tests/docs to shrink size
     invalidateCaches: true # bust cache if you’re fighting stale wheels
+    
   serverless-offline:
     httpPort: 3000
