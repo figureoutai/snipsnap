@@ -8,6 +8,7 @@ STAGE="${1:-dev}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 SERVICE_NAME="test-project-service"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
+IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 REPO_NAME="${SERVICE_NAME}-${STAGE}"
 
 log() {
@@ -41,8 +42,12 @@ log "Authenticating Docker with ECR"
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
-log "Building Docker image ${ECR_URI}:${IMAGE_TAG}"
-DOCKER_BUILDKIT=1 docker build -f Dockerfile -t "${ECR_URI}:${IMAGE_TAG}" .
+log "Building Docker image ${ECR_URI}:${IMAGE_TAG} for platform ${IMAGE_PLATFORM}"
+DOCKER_BUILDKIT=1 docker build \
+  --platform "${IMAGE_PLATFORM}" \
+  -f Dockerfile \
+  -t "${ECR_URI}:${IMAGE_TAG}" \
+  .
 
 log "Pushing image to ECR"
 docker push "${ECR_URI}:${IMAGE_TAG}"
