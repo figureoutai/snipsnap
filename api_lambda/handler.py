@@ -4,15 +4,19 @@ import os
 import asyncio
 
 import boto3
-from aurora_service import AuroraService
+
+from .aurora_service import AuroraService
+
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 
 sqs = boto3.client("sqs")
 QUEUE_URL = os.environ["QUEUE_URL"]
 SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
+DB_NAME = os.environ["DB_NAME"]
 
 
 print("version 2")
@@ -37,6 +41,7 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
     except Exception as e:
         logger.error(f"❌ The requested secret {secret_name} was not found")
 
+
 def video_receiver(event, context):
     """
     Expects:
@@ -50,7 +55,7 @@ def video_receiver(event, context):
             body = json.loads(body or "{}")
 
         message = body.get("message", "hello from lambda 👋")
-        
+
         logger.info("Received message: %s", message)
         logger.info("connecting to db")
 
@@ -60,7 +65,7 @@ def video_receiver(event, context):
             host=DB_URL,
             user=secrets["username"],
             password=secrets["password"],
-            database="strangedb",
+            database=DB_NAME,
         )
 
         asyncio.run(db_service.initialize())

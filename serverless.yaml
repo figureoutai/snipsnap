@@ -1,0 +1,614 @@
+service: test-project-service
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  tags:
+    test-project: "true"
+  vpc:
+    securityGroupIds:
+      - !Ref LambdaSecurityGroup
+    subnetIds:
+      - !Ref PrivateSubnetA
+      - !Ref PrivateSubnetB
+  environment:
+    QUEUE_URL: !Ref SqsQueue
+    SECRET_NAME: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+    DB_URL: !GetAtt AuroraCluster.Endpoint.Address
+    DB_NAME: ${self:custom.dbName}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource: !GetAtt SqsQueue.Arn
+    - Effect: Allow
+      Action:
+        - secretsmanager:GetSecretValue
+        - secretsmanager:DescribeSecret
+      Resource: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+
+functions:
+  videoReceiver:
+    handler: api_lambda/handler.video_receiver
+    memorySize: 128
+    timeout: 29
+    events:
+      - httpApi:
+          method: POST
+          path: /video-url
+
+package:
+  patterns:
+    - "!api_lambda/.venv/**"
+    - "!**"
+    - "api_lambda/**"
+
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+
+custom:
+  stage: ${self:provider.stage}
+  tagKey: test-project
+  tagValue: "true"
+  vpc:
+    cidr: 10.0.0.0/16
+    publicSubnetCidrs:
+      a: 10.0.1.0/24
+      b: 10.0.2.0/24
+    privateSubnetCidrs:
+      a: 10.0.11.0/24
+      b: 10.0.12.0/24
+  containerRepositoryName: ${self:service}-${self:custom.stage}
+  containerImageTag: latest
+  dbName: video_processing_db
+  pythonRequirements:
+    fileName: api_lambda/requirements.txt
+    usePoetry: false
+    layer: false
+    dockerizePip: non-linux
+    slim: false
+    invalidateCaches: true
+  serverless-offline:
+    httpPort: 3000
+
+resources:
+  Resources:
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: ${self:custom.vpc.cidr}
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-vpc
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-igw
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    PublicSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.publicSubnetCidrs.a}
+        AvailabilityZone: !Select [0, !GetAZs '']
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-a
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.publicSubnetCidrs.b}
+        AvailabilityZone: !Select [1, !GetAZs '']
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-b
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.privateSubnetCidrs.a}
+        AvailabilityZone: !Select [0, !GetAZs '']
+        MapPublicIpOnLaunch: false
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-a
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.privateSubnetCidrs.b}
+        AvailabilityZone: !Select [1, !GetAZs '']
+        MapPublicIpOnLaunch: false
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-b
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-rt
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicRoute:
+      Type: AWS::EC2::Route
+      DependsOn:
+        - VPCGatewayAttachment
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId: !Ref InternetGateway
+
+    PublicSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicSubnetA
+
+    PublicSubnetBRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicSubnetB
+
+    NatEip:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: vpc
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-nat-eip
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    NatGateway:
+      Type: AWS::EC2::NatGateway
+      DependsOn:
+        - VPCGatewayAttachment
+      Properties:
+        AllocationId: !GetAtt NatEip.AllocationId
+        SubnetId: !Ref PublicSubnetA
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-nat
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-rt
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateRoute:
+      Type: AWS::EC2::Route
+      DependsOn:
+        - NatGateway
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref NatGateway
+
+    PrivateSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetA
+
+    PrivateSubnetBRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetB
+
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Lambda functions
+        VpcId: !Ref VPC
+        SecurityGroupIngress: []
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-lambda
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for ECS tasks
+        VpcId: !Ref VPC
+        SecurityGroupIngress: []
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-ecs
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    DBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Aurora cluster
+        VpcId: !Ref VPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 3306
+            ToPort: 3306
+            SourceSecurityGroupId: !Ref LambdaSecurityGroup
+          - IpProtocol: tcp
+            FromPort: 3306
+            ToPort: 3306
+            SourceSecurityGroupId: !Ref ECSSecurityGroup
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-db
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    SqsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: !Sub ${self:service}-${self:custom.stage}-queue
+        VisibilityTimeout: 60
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    StorageBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub ${self:service}-${self:custom.stage}-${AWS::AccountId}
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ContainerRepository:
+      Type: AWS::ECR::Repository
+      Properties:
+        RepositoryName: ${self:custom.containerRepositoryName}
+        ImageTagMutability: MUTABLE
+        ImageScanningConfiguration:
+          ScanOnPush: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSCluster:
+      Type: AWS::ECS::Cluster
+      Properties:
+        ClusterName: !Sub ${self:service}-${self:custom.stage}
+        CapacityProviders:
+          - FARGATE
+          - FARGATE_SPOT
+        DefaultCapacityProviderStrategy:
+          - CapacityProvider: FARGATE
+            Weight: 1
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: !Sub /aws/ecs/${self:service}-${self:custom.stage}
+        RetentionInDays: 30
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSTaskExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - ecs-tasks.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSTaskRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - ecs-tasks.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: ecs-application
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sqs:ReceiveMessage
+                    - sqs:DeleteMessage
+                    - sqs:GetQueueAttributes
+                    - sqs:GetQueueUrl
+                    - sqs:ChangeMessageVisibility
+                  Resource: !GetAtt SqsQueue.Arn
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                    - secretsmanager:DescribeSecret
+                  Resource: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+                - Effect: Allow
+                  Action:
+                    - bedrock:InvokeModel
+                    - bedrock:InvokeModelWithResponseStream
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - transcribe:StartTranscriptionJob
+                    - transcribe:GetTranscriptionJob
+                    - transcribe:DeleteTranscriptionJob
+                    - transcribe:ListTranscriptionJobs
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                    - s3:GetObject
+                  Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSTaskDefinition:
+      Type: AWS::ECS::TaskDefinition
+      Properties:
+        Family: !Sub ${self:service}-${self:custom.stage}
+        RequiresCompatibilities:
+          - FARGATE
+        Cpu: "1024"
+        Memory: "6144"
+        NetworkMode: awsvpc
+        ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+        TaskRoleArn: !GetAtt ECSTaskRole.Arn
+        ContainerDefinitions:
+          - Name: app
+            Image: !Sub ${AWS::AccountId}.dkr.ecr.${self:provider.region}.amazonaws.com/${self:custom.containerRepositoryName}:${self:custom.containerImageTag}
+            PortMappings:
+              - ContainerPort: 8000
+                Protocol: tcp
+            Environment:
+              - Name: QUEUE_URL
+                Value: !Ref SqsQueue
+              - Name: SECRET_NAME
+                Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+              - Name: DB_URL
+                Value: !GetAtt AuroraCluster.Endpoint.Address
+              - Name: DB_NAME
+                Value: ${self:custom.dbName}
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group: !Ref ECSLogGroup
+                awslogs-region: ${self:provider.region}
+                awslogs-stream-prefix: app
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSService:
+      Type: AWS::ECS::Service
+      DependsOn:
+        - ECSLogGroup
+      Properties:
+        ServiceName: !Sub ${self:service}-${self:custom.stage}-service
+        Cluster: !Ref ECSCluster
+        DesiredCount: 0
+        LaunchType: FARGATE
+        DeploymentConfiguration:
+          MaximumPercent: 200
+          MinimumHealthyPercent: 0
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            AssignPublicIp: DISABLED
+            SecurityGroups:
+              - !Ref ECSSecurityGroup
+            Subnets:
+              - !Ref PrivateSubnetA
+              - !Ref PrivateSubnetB
+        TaskDefinition: !Ref ECSTaskDefinition
+        EnableECSManagedTags: true
+        PropagateTags: TASK_DEFINITION
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ApplicationAutoScalingRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - application-autoscaling.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ECSServiceScalableTarget:
+      Type: AWS::ApplicationAutoScaling::ScalableTarget
+      DependsOn:
+        - ECSService
+      Properties:
+        MinCapacity: 0
+        MaxCapacity: 4
+        ResourceId: !Sub service/${self:service}-${self:custom.stage}/${self:service}-${self:custom.stage}-service
+        RoleARN: !GetAtt ApplicationAutoScalingRole.Arn
+        ScalableDimension: ecs:service:DesiredCount
+        ServiceNamespace: ecs
+
+    ECSServiceScalingPolicy:
+      Type: AWS::ApplicationAutoScaling::ScalingPolicy
+      Properties:
+        PolicyName: !Sub ${self:service}-${self:custom.stage}-queue-depth-policy
+        PolicyType: TargetTrackingScaling
+        ScalingTargetId: !Ref ECSServiceScalableTarget
+        TargetTrackingScalingPolicyConfiguration:
+          CustomizedMetricSpecification:
+            Metrics:
+              - Id: visible
+                MetricStat:
+                  Metric:
+                    Namespace: AWS/SQS
+                    MetricName: ApproximateNumberOfMessagesVisible
+                    Dimensions:
+                      - Name: QueueName
+                        Value: !Sub ${self:service}-${self:custom.stage}-queue
+                  Stat: Average
+                ReturnData: false
+              - Id: notvisible
+                MetricStat:
+                  Metric:
+                    Namespace: AWS/SQS
+                    MetricName: ApproximateNumberOfMessagesNotVisible
+                    Dimensions:
+                      - Name: QueueName
+                        Value: !Sub ${self:service}-${self:custom.stage}-queue
+                  Stat: Average
+                ReturnData: false
+              - Id: total
+                Expression: visible + notvisible
+                Label: TotalMessages
+                ReturnData: true
+          TargetValue: 1
+          ScaleOutCooldown: 60
+          ScaleInCooldown: 30
+
+    AuroraDBSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+        DBSubnetGroupDescription: Private subnets for Aurora
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+        DBSubnetGroupName: !Sub ${self:service}-${self:custom.stage}-db-subnet
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    AuroraCluster:
+      Type: AWS::RDS::DBCluster
+      DependsOn:
+        - AuroraDBSubnetGroup
+        - DBSecurityGroup
+      Properties:
+        Engine: aurora-mysql
+        EngineMode: provisioned
+        MasterUsername: admin
+        ManageMasterUserPassword: true
+        DatabaseName: ${self:custom.dbName}
+        Port: 3306
+        DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+        VpcSecurityGroupIds:
+          - !Ref DBSecurityGroup
+        ServerlessV2ScalingConfiguration:
+          MinCapacity: 0
+          MaxCapacity: 1.5
+        BackupRetentionPeriod: 1
+        PreferredBackupWindow: 07:00-09:00
+        PreferredMaintenanceWindow: sun:09:00-sun:11:00
+        StorageEncrypted: true
+        DeletionProtection: false
+        CopyTagsToSnapshot: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    AuroraDBInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        DBClusterIdentifier: !Ref AuroraCluster
+        DBInstanceClass: db.serverless
+        Engine: aurora-mysql
+        PubliclyAccessible: false
+        AutoMinorVersionUpgrade: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}

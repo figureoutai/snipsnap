@@ -1,0 +1,17 @@
+{
+  "name": "hilight-clipping-service",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "deploy": "serverless deploy --config serverless.yaml",
+    "remove": "serverless remove --config serverless.yaml",
+    "package": "serverless package --config serverless.yaml",
+    "info": "serverless info --config serverless.yaml",
+    "offline": "serverless offline --config serverless.yaml --stage local"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.6.0",
+    "serverless-python-requirements": "^6.1.0"
+  }
+}
