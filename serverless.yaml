@@ -1,13 +1,13 @@
-service: highlight-clipping-service
+service: test-project-service
 frameworkVersion: "3"
 
 provider:
   name: aws
   runtime: python3.11
   region: us-east-1
-  stage: ${opt:stage, 'main'}
+  stage: ${opt:stage, 'dev'}
   tags:
-    aws-hackathon-2025: "true"
+    test-project: "true"
   vpc:
     securityGroupIds:
       - !Ref LambdaSecurityGroup
@@ -15,15 +15,23 @@ provider:
       - !Ref PrivateSubnetA
       - !Ref PrivateSubnetB
   environment:
-    QUEUE_URL: !Ref SqsQueue
     SECRET_NAME: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
     DB_URL: !GetAtt AuroraCluster.Endpoint.Address
     DB_NAME: ${self:custom.dbName}
+    BATCH_JOB_QUEUE: !Ref BatchJobQueue
+    BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - sqs:SendMessage
-      Resource: !GetAtt SqsQueue.Arn
+        - batch:SubmitJob
+      Resource:
+        - !GetAtt BatchJobQueue.JobQueueArn
+        - !GetAtt BatchJobDefinition.JobDefinitionArn
+    - Effect: Allow
+      Action:
+        - batch:DescribeJobs
+        - batch:DescribeJobQueues
+      Resource: "*"
     - Effect: Allow
       Action:
         - secretsmanager:GetSecretValue
@@ -52,7 +60,7 @@ plugins:
 
 custom:
   stage: ${self:provider.stage}
-  tagKey: aws-hackathon-2025
+  tagKey: test-project
   tagValue: "true"
   vpc:
     cidr: 10.0.0.0/16
@@ -258,10 +266,10 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSSecurityGroup:
+    BatchSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
-        GroupDescription: Security group for ECS tasks
+        GroupDescription: Security group for AWS Batch jobs
         VpcId: !Ref VPC
         SecurityGroupIngress: []
         SecurityGroupEgress:
@@ -271,7 +279,7 @@ resources:
             CidrIp: 0.0.0.0/0
         Tags:
           - Key: Name
-            Value: !Sub ${self:service}-${self:custom.stage}-sg-ecs
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-batch
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
@@ -288,7 +296,7 @@ resources:
           - IpProtocol: tcp
             FromPort: 3306
             ToPort: 3306
-            SourceSecurityGroupId: !Ref ECSSecurityGroup
+            SourceSecurityGroupId: !Ref BatchSecurityGroup
         SecurityGroupEgress:
           - IpProtocol: -1
             FromPort: 0
@@ -297,15 +305,6 @@ resources:
         Tags:
           - Key: Name
             Value: !Sub ${self:service}-${self:custom.stage}-sg-db
-          - Key: ${self:custom.tagKey}
-            Value: ${self:custom.tagValue}
-
-    SqsQueue:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: !Sub ${self:service}-${self:custom.stage}-queue
-        VisibilityTimeout: 60
-        Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
@@ -335,30 +334,16 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSCluster:
-      Type: AWS::ECS::Cluster
-      Properties:
-        ClusterName: !Sub ${self:service}-${self:custom.stage}
-        CapacityProviders:
-          - FARGATE
-          - FARGATE_SPOT
-        DefaultCapacityProviderStrategy:
-          - CapacityProvider: FARGATE
-            Weight: 1
-        Tags:
-          - Key: ${self:custom.tagKey}
-            Value: ${self:custom.tagValue}
-
-    ECSLogGroup:
+    BatchLogGroup:
       Type: AWS::Logs::LogGroup
       Properties:
-        LogGroupName: !Sub /aws/ecs/${self:service}-${self:custom.stage}
+        LogGroupName: !Sub /aws/batch/job/${self:service}-${self:custom.stage}
         RetentionInDays: 30
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSTaskExecutionRole:
+    BatchTaskExecutionRole:
       Type: AWS::IAM::Role
       Properties:
         AssumeRolePolicyDocument:
@@ -376,7 +361,7 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSTaskRole:
+    BatchTaskRole:
       Type: AWS::IAM::Role
       Properties:
         AssumeRolePolicyDocument:
@@ -389,18 +374,10 @@ resources:
               Action:
                 - sts:AssumeRole
         Policies:
-          - PolicyName: ecs-application
+          - PolicyName: batch-application
             PolicyDocument:
               Version: "2012-10-17"
               Statement:
-                - Effect: Allow
-                  Action:
-                    - sqs:ReceiveMessage
-                    - sqs:DeleteMessage
-                    - sqs:GetQueueAttributes
-                    - sqs:GetQueueUrl
-                    - sqs:ChangeMessageVisibility
-                  Resource: !GetAtt SqsQueue.Arn
                 - Effect: Allow
                   Action:
                     - secretsmanager:GetSecretValue
@@ -431,70 +408,7 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSTaskDefinition:
-      Type: AWS::ECS::TaskDefinition
-      Properties:
-        Family: !Sub ${self:service}-${self:custom.stage}
-        RequiresCompatibilities:
-          - FARGATE
-        Cpu: "1024"
-        Memory: "6144"
-        NetworkMode: awsvpc
-        ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
-        TaskRoleArn: !GetAtt ECSTaskRole.Arn
-        ContainerDefinitions:
-          - Name: app
-            Image: !Sub ${AWS::AccountId}.dkr.ecr.${self:provider.region}.amazonaws.com/${self:custom.containerRepositoryName}:${self:custom.containerImageTag}
-            PortMappings:
-              - ContainerPort: 8000
-                Protocol: tcp
-            Environment:
-              - Name: QUEUE_URL
-                Value: !Ref SqsQueue
-              - Name: SECRET_NAME
-                Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
-              - Name: DB_URL
-                Value: !GetAtt AuroraCluster.Endpoint.Address
-              - Name: DB_NAME
-                Value: ${self:custom.dbName}
-            LogConfiguration:
-              LogDriver: awslogs
-              Options:
-                awslogs-group: !Ref ECSLogGroup
-                awslogs-region: ${self:provider.region}
-                awslogs-stream-prefix: app
-        Tags:
-          - Key: ${self:custom.tagKey}
-            Value: ${self:custom.tagValue}
-
-    ECSService:
-      Type: AWS::ECS::Service
-      DependsOn:
-        - ECSLogGroup
-      Properties:
-        ServiceName: !Sub ${self:service}-${self:custom.stage}-service
-        Cluster: !Ref ECSCluster
-        DesiredCount: 0
-        LaunchType: FARGATE
-        DeploymentConfiguration:
-          MaximumPercent: 200
-          MinimumHealthyPercent: 0
-        NetworkConfiguration:
-          AwsvpcConfiguration:
-            AssignPublicIp: DISABLED
-            SecurityGroups:
-              - !Ref ECSSecurityGroup
-            Subnets:
-              - !Ref PrivateSubnetA
-              - !Ref PrivateSubnetB
-        TaskDefinition: !Ref ECSTaskDefinition
-        EnableECSManagedTags: true
-        PropagateTags: TASK_DEFINITION
-        Tags:
-          - Key: ${self:custom.tagKey}
-            Value: ${self:custom.tagValue}
-
-    ApplicationAutoScalingRole:
+    BatchServiceRole:
       Type: AWS::IAM::Role
       Properties:
         AssumeRolePolicyDocument:
@@ -503,63 +417,74 @@ resources:
             - Effect: Allow
               Principal:
                 Service:
-                  - application-autoscaling.amazonaws.com
+                  - batch.amazonaws.com
               Action:
                 - sts:AssumeRole
         ManagedPolicyArns:
-          - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole
+          - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
-    ECSServiceScalableTarget:
-      Type: AWS::ApplicationAutoScaling::ScalableTarget
-      DependsOn:
-        - ECSService
+    BatchComputeEnvironment:
+      Type: AWS::Batch::ComputeEnvironment
       Properties:
-        MinCapacity: 0
-        MaxCapacity: 4
-        ResourceId: !Sub service/${self:service}-${self:custom.stage}/${self:service}-${self:custom.stage}-service
-        RoleARN: !GetAtt ApplicationAutoScalingRole.Arn
-        ScalableDimension: ecs:service:DesiredCount
-        ServiceNamespace: ecs
+        ComputeEnvironmentName: !Sub ${self:service}-${self:custom.stage}-compute-env
+        Type: MANAGED
+        State: ENABLED
+        ServiceRole: !GetAtt BatchServiceRole.Arn
+        ComputeResources:
+          Type: FARGATE
+          MaxvCpus: 4
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroupIds:
+            - !Ref BatchSecurityGroup
 
-    ECSServiceScalingPolicy:
-      Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    BatchJobQueue:
+      Type: AWS::Batch::JobQueue
       Properties:
-        PolicyName: !Sub ${self:service}-${self:custom.stage}-queue-depth-policy
-        PolicyType: TargetTrackingScaling
-        ScalingTargetId: !Ref ECSServiceScalableTarget
-        TargetTrackingScalingPolicyConfiguration:
-          CustomizedMetricSpecification:
-            Metrics:
-              - Id: visible
-                MetricStat:
-                  Metric:
-                    Namespace: AWS/SQS
-                    MetricName: ApproximateNumberOfMessagesVisible
-                    Dimensions:
-                      - Name: QueueName
-                        Value: !Sub ${self:service}-${self:custom.stage}-queue
-                  Stat: Average
-                ReturnData: false
-              - Id: notvisible
-                MetricStat:
-                  Metric:
-                    Namespace: AWS/SQS
-                    MetricName: ApproximateNumberOfMessagesNotVisible
-                    Dimensions:
-                      - Name: QueueName
-                        Value: !Sub ${self:service}-${self:custom.stage}-queue
-                  Stat: Average
-                ReturnData: false
-              - Id: total
-                Expression: visible + notvisible
-                Label: TotalMessages
-                ReturnData: true
-          TargetValue: 1
-          ScaleOutCooldown: 60
-          ScaleInCooldown: 30
+        JobQueueName: !Sub ${self:service}-${self:custom.stage}-queue
+        Priority: 1
+        State: ENABLED
+        ComputeEnvironmentOrder:
+          - Order: 1
+            ComputeEnvironment: !Ref BatchComputeEnvironment
+
+    BatchJobDefinition:
+      Type: AWS::Batch::JobDefinition
+      Properties:
+        JobDefinitionName: !Sub ${self:service}-${self:custom.stage}-job
+        Type: container
+        PlatformCapabilities:
+          - FARGATE
+        ContainerProperties:
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${self:provider.region}.amazonaws.com/${self:custom.containerRepositoryName}:${self:custom.containerImageTag}
+          ExecutionRoleArn: !GetAtt BatchTaskExecutionRole.Arn
+          JobRoleArn: !GetAtt BatchTaskRole.Arn
+          ResourceRequirements:
+            - Type: VCPU
+              Value: "1"
+            - Type: MEMORY
+              Value: "6144"
+          Environment:
+            - Name: SECRET_NAME
+              Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+            - Name: DB_URL
+              Value: !GetAtt AuroraCluster.Endpoint.Address
+            - Name: DB_NAME
+              Value: ${self:custom.dbName}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BatchLogGroup
+              awslogs-region: ${self:provider.region}
+              awslogs-stream-prefix: app
+          NetworkConfiguration:
+            AssignPublicIp: DISABLED
+        RetryStrategy:
+          Attempts: 1
 
     AuroraDBSubnetGroup:
       Type: AWS::RDS::DBSubnetGroup

@@ -1,7 +1,9 @@
+import asyncio
 import json
 import logging
 import os
-import asyncio
+import time
+import uuid
 
 import boto3
 
@@ -12,8 +14,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-sqs = boto3.client("sqs")
-QUEUE_URL = os.environ["QUEUE_URL"]
+batch = boto3.client("batch")
+JOB_QUEUE = os.environ["BATCH_JOB_QUEUE"]
+JOB_DEFINITION = os.environ["BATCH_JOB_DEFINITION"]
 SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
@@ -72,16 +75,31 @@ def video_receiver(event, context):
 
         logger.info("successfully connected to db")
 
+        payload = message if isinstance(message, str) else json.dumps(message)
+
+        job_name = f"video-job-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+
         try:
-            sqs.send_message(
-                QueueUrl=QUEUE_URL,
-                MessageBody=message if isinstance(message, str) else json.dumps(message),
+            submission = batch.submit_job(
+                jobName=job_name,
+                jobQueue=JOB_QUEUE,
+                jobDefinition=JOB_DEFINITION,
+                containerOverrides={
+                    "environment": [
+                        {"name": "JOB_MESSAGE", "value": payload},
+                    ]
+                },
             )
-        except Exception as sqs_error:
-            logger.exception("Failed to post message to SQS: %s", sqs_error)
+        except Exception as batch_error:
+            logger.exception("Failed to submit AWS Batch job: %s", batch_error)
             raise
 
-        resp = {"ok": True, "queued": message}
+        resp = {
+            "ok": True,
+            "jobName": submission.get("jobName", job_name),
+            "jobId": submission.get("jobId"),
+            "payload": payload,
+        }
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
