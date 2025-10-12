@@ -1,13 +1,13 @@
-service: test-project-service
+service: highlight-clipping-service
 frameworkVersion: "3"
 
 provider:
   name: aws
   runtime: python3.11
   region: us-east-1
-  stage: ${opt:stage, 'dev'}
+  stage: ${opt:stage, 'main'}
   tags:
-    test-project: "true"
+    aws-hackathon-2025: "true"
   vpc:
     securityGroupIds:
       - !Ref LambdaSecurityGroup
@@ -52,7 +52,7 @@ plugins:
 
 custom:
   stage: ${self:provider.stage}
-  tagKey: test-project
+  tagKey: aws-hackathon-2025
   tagValue: "true"
   vpc:
     cidr: 10.0.0.0/16
