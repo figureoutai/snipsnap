@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-STAGE="${STAGE:-dev}"
+STAGE="${STAGE:-main}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
-SERVICE_NAME="test-project-service"
+SERVICE_NAME="highlight-clipping-service"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 IMAGE_PLATFORM="${IMAGE_PLATFORM:-linux/amd64}"
 DEPLOY_INFRA=true

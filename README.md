@@ -105,4 +105,4 @@ class SaliencyScorer:
 
 ### Deploy
 Run `./deploy.sh` 
-This updates infra by running serverless and updates ecr image and deploys ecs
+This updates infra by running serverless and updates ecr image and deploys aws batch
