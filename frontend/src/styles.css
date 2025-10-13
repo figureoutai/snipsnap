@@ -1,0 +1,50 @@
+:root {
+  --bg: #0b1020;
+  --panel: #12182b;
+  --text: #e8ecf5;
+  --muted: #a9b3c7;
+  --bar-bg: #e5e7eb;
+  --highlight: #f59e0b;
+  --playhead: #111827;
+  --ring: rgba(245, 158, 11, 0.35);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; color: var(--text); background: linear-gradient(180deg, #0a0f1f, #060913); min-height: 100vh; }
+
+.app-shell {
+  max-width: 880px;
+  margin: 24px auto;
+  padding: 16px;
+}
+
+h1 { font-size: 1.4rem; font-weight: 600; margin: 0 0 16px; }
+
+.controls { display: grid; gap: 12px; grid-template-columns: 1fr; margin-bottom: 16px; }
+.field { display: grid; gap: 6px; }
+.field span { color: var(--muted); font-size: 0.9rem; }
+.field input, .field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2a3559;
+  background: #0f1530;
+  color: var(--text);
+  outline: none;
+}
+.field input:focus, .field textarea:focus { border-color: #3a4a7c; box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15); }
+
+.player-container { background: #0f1530; border: 1px solid #2a3559; border-radius: 12px; padding: 12px; }
+.video-el { width: 100%; max-height: 70vh; background: #000; border-radius: 8px; }
+
+.bar-wrap { margin-top: 10px; }
+.highlight-bar { position: relative; height: 8px; background: var(--bar-bg); border-radius: 999px; cursor: pointer; overflow: hidden; }
+.highlight-range { position: absolute; top: 0; height: 100%; background: var(--highlight); opacity: 0.85; }
+.highlight-bar:hover .highlight-range { box-shadow: 0 0 0 3px var(--ring) inset; }
+.playhead { position: absolute; top: -2px; width: 2px; height: 12px; background: var(--playhead); border-radius: 1px; transform: translateX(-50%); }
+
+.time-row { display: flex; justify-content: space-between; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 6px; font-size: 0.9rem; }
+
+.hint { color: var(--muted); margin-top: 12px; font-size: 0.9rem; }
+.hint code { background: #0f1530; padding: 2px 6px; border-radius: 6px; border: 1px solid #2a3559; }
+
