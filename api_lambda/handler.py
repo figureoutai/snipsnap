@@ -22,7 +22,6 @@ DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
 
-
 print("version 2")
 
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
@@ -45,6 +44,28 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
     except Exception as e:
         logger.error(f"❌ The requested secret {secret_name} was not found")
 
+# Global pool (shared across invocations)
+db_service: AuroraService | None = None
+
+async def init_db():
+    global db_service
+    if db_service is None:
+        secrets = get_secret(SECRET_NAME)
+        db_service = AuroraService(
+            host=DB_URL,
+            user=secrets["username"],
+            password=secrets["password"],
+            database=DB_NAME,
+        )
+        await db_service.initialize()
+    return db_service
+
+async def insert_dict(table_name: str, data: dict):
+    logger.info("connecting to db")
+    service = await init_db()
+    logger.info("successfully connected to db")
+    return await service.insert_dict(table_name, data)
+
 
 def video_receiver(event, context):
     """
@@ -64,20 +85,6 @@ def video_receiver(event, context):
             raise KeyError("stream_url is required to start the pipeline.")
 
         logger.info("Received stream url: %s", stream_url)
-        logger.info("connecting to db")
-
-        secrets = get_secret(SECRET_NAME)
-
-        db_service = AuroraService(
-            host=DB_URL,
-            user=secrets["username"],
-            password=secrets["password"],
-            database=DB_NAME,
-        )
-
-        asyncio.run(db_service.initialize())
-
-        logger.info("successfully connected to db")
 
         stream_id = uuid.uuid4().hex[:8]
         job_name = f"video-job-{int(time.time())}-{stream_id}"
@@ -92,7 +99,7 @@ def video_receiver(event, context):
             "status": "SUBMITTED"
         }
 
-        asyncio.run(db_service.insert_dict(STREAM_METADATA_TABLE, stream_metadata))
+        asyncio.run(insert_dict(STREAM_METADATA_TABLE, stream_metadata))
 
         try:
             submission = batch.submit_job(

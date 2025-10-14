@@ -22,11 +22,10 @@ def upgrade() -> None:
         sa.Column('highlights', sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
-    
     # Create indexes
-    op.create_index('idx_stream_id', 'score_metadata', ['stream_id'])
-    op.create_index('idx_stream_url', 'score_metadata', ['stream_url'])
-
+    op.create_index('idx_stream_id', 'stream_metadata', ['stream_id'])
+    op.create_index('idx_stream_url', 'stream_metadata', ['stream_url'])
+    
 
 def downgrade() -> None:
-    op.drop_table('stream_metadata')
+    op.drop_table('stream_metadata', if_exists=True)
