@@ -22,4 +22,4 @@ data/**/new_chunks
 node_modules/
 .serverless/
 .env
-
+.requirements*

@@ -41,5 +41,9 @@ node_modules/
 *.md
 *.ini
 
-# server api 
-api-lambda/
+# Serverless Lambda project
+api_lambda/
+
+# Local datasets / media / unused assets
+data/
+workflow.png

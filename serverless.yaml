@@ -1,0 +1,539 @@
+service: highlight-clipping-service
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  stage: ${opt:stage, 'main'}
+  tags:
+    aws-hackathon-2025: "true"
+  vpc:
+    securityGroupIds:
+      - !Ref LambdaSecurityGroup
+    subnetIds:
+      - !Ref PrivateSubnetA
+      - !Ref PrivateSubnetB
+  environment:
+    SECRET_NAME: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+    DB_URL: !GetAtt AuroraCluster.Endpoint.Address
+    DB_NAME: ${self:custom.dbName}
+    BATCH_JOB_QUEUE: !Ref BatchJobQueue
+    BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - batch:SubmitJob
+      Resource:
+        - !GetAtt BatchJobQueue.JobQueueArn
+        - !GetAtt BatchJobDefinition.JobDefinitionArn
+    - Effect: Allow
+      Action:
+        - batch:DescribeJobs
+        - batch:DescribeJobQueues
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - secretsmanager:GetSecretValue
+        - secretsmanager:DescribeSecret
+      Resource: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+
+functions:
+  videoReceiver:
+    handler: api_lambda/handler.video_receiver
+    memorySize: 128
+    timeout: 29
+    events:
+      - httpApi:
+          method: POST
+          path: /video-url
+
+package:
+  patterns:
+    - "!api_lambda/.venv/**"
+    - "!**"
+    - "api_lambda/**"
+
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+
+custom:
+  stage: ${self:provider.stage}
+  tagKey: aws-hackathon-2025
+  tagValue: "true"
+  vpc:
+    cidr: 10.0.0.0/16
+    publicSubnetCidrs:
+      a: 10.0.1.0/24
+      b: 10.0.2.0/24
+    privateSubnetCidrs:
+      a: 10.0.11.0/24
+      b: 10.0.12.0/24
+  containerRepositoryName: ${self:service}-${self:custom.stage}
+  containerImageTag: latest
+  dbName: video_processing_db
+  pythonRequirements:
+    fileName: api_lambda/requirements.txt
+    usePoetry: false
+    layer: false
+    dockerizePip: non-linux
+    slim: false
+    invalidateCaches: true
+  serverless-offline:
+    httpPort: 3000
+
+resources:
+  Resources:
+    VPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: ${self:custom.vpc.cidr}
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-vpc
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-igw
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId: !Ref VPC
+        InternetGatewayId: !Ref InternetGateway
+
+    PublicSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.publicSubnetCidrs.a}
+        AvailabilityZone: !Select [0, !GetAZs '']
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-a
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.publicSubnetCidrs.b}
+        AvailabilityZone: !Select [1, !GetAZs '']
+        MapPublicIpOnLaunch: true
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-b
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.privateSubnetCidrs.a}
+        AvailabilityZone: !Select [0, !GetAZs '']
+        MapPublicIpOnLaunch: false
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-a
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        VpcId: !Ref VPC
+        CidrBlock: ${self:custom.vpc.privateSubnetCidrs.b}
+        AvailabilityZone: !Select [1, !GetAZs '']
+        MapPublicIpOnLaunch: false
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-b
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-public-rt
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PublicRoute:
+      Type: AWS::EC2::Route
+      DependsOn:
+        - VPCGatewayAttachment
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId: !Ref InternetGateway
+
+    PublicSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicSubnetA
+
+    PublicSubnetBRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PublicRouteTable
+        SubnetId: !Ref PublicSubnetB
+
+    NatEip:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: vpc
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-nat-eip
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    NatGateway:
+      Type: AWS::EC2::NatGateway
+      DependsOn:
+        - VPCGatewayAttachment
+      Properties:
+        AllocationId: !GetAtt NatEip.AllocationId
+        SubnetId: !Ref PublicSubnetA
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-nat
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId: !Ref VPC
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-private-rt
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    PrivateRoute:
+      Type: AWS::EC2::Route
+      DependsOn:
+        - NatGateway
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId: !Ref NatGateway
+
+    PrivateSubnetARouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetA
+
+    PrivateSubnetBRouteTableAssociation:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId: !Ref PrivateRouteTable
+        SubnetId: !Ref PrivateSubnetB
+
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Lambda functions
+        VpcId: !Ref VPC
+        SecurityGroupIngress: []
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-lambda
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for AWS Batch jobs
+        VpcId: !Ref VPC
+        SecurityGroupIngress: []
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-batch
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    DBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Aurora cluster
+        VpcId: !Ref VPC
+        SecurityGroupIngress:
+          - IpProtocol: tcp
+            FromPort: 3306
+            ToPort: 3306
+            SourceSecurityGroupId: !Ref LambdaSecurityGroup
+          - IpProtocol: tcp
+            FromPort: 3306
+            ToPort: 3306
+            SourceSecurityGroupId: !Ref BatchSecurityGroup
+        SecurityGroupEgress:
+          - IpProtocol: -1
+            FromPort: 0
+            ToPort: 0
+            CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: !Sub ${self:service}-${self:custom.stage}-sg-db
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    StorageBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub ${self:service}-${self:custom.stage}-${AWS::AccountId}
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    ContainerRepository:
+      Type: AWS::ECR::Repository
+      Properties:
+        RepositoryName: ${self:custom.containerRepositoryName}
+        ImageTagMutability: MUTABLE
+        ImageScanningConfiguration:
+          ScanOnPush: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchLogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: !Sub /aws/batch/job/${self:service}-${self:custom.stage}
+        RetentionInDays: 30
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchTaskExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - ecs-tasks.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchTaskRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - ecs-tasks.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: batch-application
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                    - secretsmanager:DescribeSecret
+                  Resource: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+                - Effect: Allow
+                  Action:
+                    - bedrock:InvokeModel
+                    - bedrock:InvokeModelWithResponseStream
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - transcribe:StartTranscriptionJob
+                    - transcribe:GetTranscriptionJob
+                    - transcribe:DeleteTranscriptionJob
+                    - transcribe:ListTranscriptionJobs
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - s3:PutObject
+                    - s3:GetObject
+                  Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
+                - Effect: Allow
+                  Action:
+                    - s3:ListBucket
+                  Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchServiceRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - batch.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    BatchComputeEnvironment:
+      Type: AWS::Batch::ComputeEnvironment
+      Properties:
+        ComputeEnvironmentName: !Sub ${self:service}-${self:custom.stage}-compute-env
+        Type: MANAGED
+        State: ENABLED
+        ServiceRole: !GetAtt BatchServiceRole.Arn
+        ComputeResources:
+          Type: FARGATE
+          MaxvCpus: 4
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+          SecurityGroupIds:
+            - !Ref BatchSecurityGroup
+
+    BatchJobQueue:
+      Type: AWS::Batch::JobQueue
+      Properties:
+        JobQueueName: !Sub ${self:service}-${self:custom.stage}-queue
+        Priority: 1
+        State: ENABLED
+        ComputeEnvironmentOrder:
+          - Order: 1
+            ComputeEnvironment: !Ref BatchComputeEnvironment
+
+    BatchJobDefinition:
+      Type: AWS::Batch::JobDefinition
+      Properties:
+        JobDefinitionName: !Sub ${self:service}-${self:custom.stage}-job
+        Type: container
+        PlatformCapabilities:
+          - FARGATE
+        ContainerProperties:
+          Image: !Sub ${AWS::AccountId}.dkr.ecr.${self:provider.region}.amazonaws.com/${self:custom.containerRepositoryName}:${self:custom.containerImageTag}
+          ExecutionRoleArn: !GetAtt BatchTaskExecutionRole.Arn
+          JobRoleArn: !GetAtt BatchTaskRole.Arn
+          ResourceRequirements:
+            - Type: VCPU
+              Value: "1"
+            - Type: MEMORY
+              Value: "6144"
+          Environment:
+            - Name: SECRET_NAME
+              Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+            - Name: DB_URL
+              Value: !GetAtt AuroraCluster.Endpoint.Address
+            - Name: DB_NAME
+              Value: ${self:custom.dbName}
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BatchLogGroup
+              awslogs-region: ${self:provider.region}
+              awslogs-stream-prefix: app
+          NetworkConfiguration:
+            AssignPublicIp: DISABLED
+        RetryStrategy:
+          Attempts: 1
+
+    AuroraDBSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+        DBSubnetGroupDescription: Private subnets for Aurora
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+        DBSubnetGroupName: !Sub ${self:service}-${self:custom.stage}-db-subnet
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    AuroraCluster:
+      Type: AWS::RDS::DBCluster
+      DependsOn:
+        - AuroraDBSubnetGroup
+        - DBSecurityGroup
+      Properties:
+        Engine: aurora-mysql
+        EngineMode: provisioned
+        MasterUsername: admin
+        ManageMasterUserPassword: true
+        DatabaseName: ${self:custom.dbName}
+        Port: 3306
+        DBSubnetGroupName: !Ref AuroraDBSubnetGroup
+        VpcSecurityGroupIds:
+          - !Ref DBSecurityGroup
+        ServerlessV2ScalingConfiguration:
+          MinCapacity: 0
+          MaxCapacity: 1.5
+        BackupRetentionPeriod: 1
+        PreferredBackupWindow: 07:00-09:00
+        PreferredMaintenanceWindow: sun:09:00-sun:11:00
+        StorageEncrypted: true
+        DeletionProtection: false
+        CopyTagsToSnapshot: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    AuroraDBInstance:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        DBClusterIdentifier: !Ref AuroraCluster
+        DBInstanceClass: db.serverless
+        Engine: aurora-mysql
+        PubliclyAccessible: false
+        AutoMinorVersionUpgrade: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 class AuroraService:
 
     def __init__(
@@ -16,7 +17,7 @@ class AuroraService:
         user: str,
         password: str,
         database: str,
-        port: int = 5432,
+        port: int = 3306,
         pool_size: int = 10,
     ):
         self.host = host
@@ -334,3 +335,4 @@ class AuroraService:
             self.pool.close()
             await self.pool.wait_closed()
             logger.info("Connection pool closed")
+

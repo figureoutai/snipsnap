@@ -102,3 +102,7 @@ class SaliencyScorer:
     - Context Addition
     - Scene Alignment using pyscenedetect
     - Ranking and Output
+
+### Deploy
+Running `./deploy.sh` updates infra by running serverless and updates ecr image and deploys aws batch
+To only update ecr and aws batch do `./deploy.sh --image-only`
