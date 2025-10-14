@@ -311,8 +311,7 @@ class AuroraService:
             List of dictionaries with video metadata
         """
         query = """
-            SELECT id, stream_id, filename, chunk_index, start_timestamp, end_timestamp
-                   sample_rate, transcript
+            SELECT id, stream_id, filename, chunk_index, start_timestamp, end_timestamp, sample_rate, transcript
             FROM audio_metadata
             WHERE stream_id = %s
         """

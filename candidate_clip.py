@@ -25,7 +25,7 @@ class CandidateClip:
         return list(range(start_chunk, end_chunk + 1))
 
     def load_audio_segment(self, chunk_duration):
-        chunks = self.get_audio_chunk_indexes(self.start_time, self.end_time, chunk_duration)
+        chunks = self.get_audio_chunk_indexes(chunk_duration)
         sr = 0
         audios = []
         for c in chunks:
