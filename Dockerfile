@@ -28,4 +28,4 @@ COPY . .
 # Expose port (adjust if needed)
 EXPOSE 8000
 
-CMD ["uv", "run", "main_dup.py"]
+CMD ["uv", "run", "main.py"]
