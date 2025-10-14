@@ -3,7 +3,6 @@ LANGUAGE_CODE="en"
 
 S3_BUCKET_NAME = "clip-highlights-bucket"
 S3_REGION = "us-east-1"
-SQS_URL = "https://sqs.us-east-1.amazonaws.com/975049899047/sqs-hackathon-2025"
 IMAGE_BUCKET_PREFIX = "images/frame/"
 AUDIO_BUCKET_PREFIX = "audio/streams/"
 
@@ -12,10 +11,11 @@ DB_NAME="strangedb"
 VIDEO_METADATA_TABLE_NAME = "video_metadata"
 AUDIO_METADATA_TABLE_NAME = "audio_metadata"
 SCORE_METADATA_TABLE = "score_metadata"
+STREAM_METADATA_TABLE = "stream_metadata"
 
-DB_HOST = "database-1.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com"
-DB_PORT = 5432
-DB_SECRET_NAME = "rds!cluster-d28aeadb-5f1e-4e2f-a4b7-0c5c06087d72"
+DB_HOST = "database-2.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com"
+DB_PORT = 3306
+DB_SECRET_NAME = "rds!cluster-709bbecc-8432-4da5-8727-aafbf13556e3"
 
 # AUDIO CONFIGURATION
 TARGET_SAMPLE_RATE = 16000

@@ -154,18 +154,4 @@ class ClipScorerService:
             }
             await self.db_service.insert_dict(SCORE_METADATA_TABLE, metadata)
             i += 1
-
-
-if __name__ == "__main__":
-    scorer = ClipScorerService()
-    for i in range(0, 25):
-        start = i * 5
-        end = start + 5
-        if start > 0:
-            scorer.score_saliency(start-2, end-2)
-        else:
-            scorer.score_saliency(0, 5)
-
-
-
-
+            

@@ -20,6 +20,7 @@ provider:
     DB_NAME: ${self:custom.dbName}
     BATCH_JOB_QUEUE: !Ref BatchJobQueue
     BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
+    STREAM_METADATA_TABLE: "stream_metadata"
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -47,6 +48,14 @@ functions:
       - httpApi:
           method: POST
           path: /video-url
+  highlightReceiver:
+    handler: api_lambda/highlight_handler.get_highlights
+    memorySize: 128
+    timeout: 29
+    events:
+      - httpApi:
+          method: GET
+          path: /highlights
 
 package:
   patterns:
@@ -117,7 +126,7 @@ resources:
       Properties:
         VpcId: !Ref VPC
         CidrBlock: ${self:custom.vpc.publicSubnetCidrs.a}
-        AvailabilityZone: !Select [0, !GetAZs '']
+        AvailabilityZone: !Select [0, !GetAZs ""]
         MapPublicIpOnLaunch: true
         Tags:
           - Key: Name
@@ -130,7 +139,7 @@ resources:
       Properties:
         VpcId: !Ref VPC
         CidrBlock: ${self:custom.vpc.publicSubnetCidrs.b}
-        AvailabilityZone: !Select [1, !GetAZs '']
+        AvailabilityZone: !Select [1, !GetAZs ""]
         MapPublicIpOnLaunch: true
         Tags:
           - Key: Name
@@ -143,7 +152,7 @@ resources:
       Properties:
         VpcId: !Ref VPC
         CidrBlock: ${self:custom.vpc.privateSubnetCidrs.a}
-        AvailabilityZone: !Select [0, !GetAZs '']
+        AvailabilityZone: !Select [0, !GetAZs ""]
         MapPublicIpOnLaunch: false
         Tags:
           - Key: Name
@@ -156,7 +165,7 @@ resources:
       Properties:
         VpcId: !Ref VPC
         CidrBlock: ${self:custom.vpc.privateSubnetCidrs.b}
-        AvailabilityZone: !Select [1, !GetAZs '']
+        AvailabilityZone: !Select [1, !GetAZs ""]
         MapPublicIpOnLaunch: false
         Tags:
           - Key: Name

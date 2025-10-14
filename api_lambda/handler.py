@@ -20,6 +20,7 @@ JOB_DEFINITION = os.environ["BATCH_JOB_DEFINITION"]
 SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
+STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
 
 
 print("version 2")
@@ -57,9 +58,12 @@ def video_receiver(event, context):
         if isinstance(body, str):
             body = json.loads(body or "{}")
 
-        message = body.get("message", "hello from lambda 👋")
+        stream_url = body.get("stream_url", None)
 
-        logger.info("Received message: %s", message)
+        if not stream_url:
+            raise KeyError("stream_url is required to start the pipeline.")
+
+        logger.info("Received stream url: %s", stream_url)
         logger.info("connecting to db")
 
         secrets = get_secret(SECRET_NAME)
@@ -75,9 +79,20 @@ def video_receiver(event, context):
 
         logger.info("successfully connected to db")
 
-        payload = message if isinstance(message, str) else json.dumps(message)
+        stream_id = uuid.uuid4().hex[:8]
+        job_name = f"video-job-{int(time.time())}-{stream_id}"
+        payload = json.dumps({
+            "stream_url": stream_url,
+            "stream_id": stream_id
+        })
 
-        job_name = f"video-job-{int(time.time())}-{uuid.uuid4().hex[:8]}"
+        stream_metadata = {
+            "stream_url": stream_url,
+            "stream_id": stream_id,
+            "status": "SUBMITTED"
+        }
+
+        asyncio.run(db_service.insert_dict(STREAM_METADATA_TABLE, stream_metadata))
 
         try:
             submission = batch.submit_job(

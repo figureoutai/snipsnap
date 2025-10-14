@@ -1,3 +1,4 @@
+import os
 import time
 import uuid
 import json
@@ -5,27 +6,51 @@ import signal
 import asyncio
 import threading
 
-from config import BASE_DIR, SQS_URL
-from sqs_service import SQSService
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
+from config import BASE_DIR, STREAM_METADATA_TABLE
+from repositories.aurora_service import AuroraService
 from utils.unique_async_queue import UniqueAsyncQueue
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
 from clip_scorer_service import ClipScorerService
 
-def get_parameters_from_sqs(sqs_service: SQSService):
-    messages = sqs_service.receive_message(1)
-    body = json.loads(messages[0]["Body"])
-    sqs_service.delete_message(messages[0]["ReceiptHandle"])
-    return body
+db_service = AuroraService()
+
+async def set_stream_status(stream_id, status: str, message: str = None):
+    await db_service.update_dict(
+        STREAM_METADATA_TABLE, 
+        {"status": status, "message": message}, 
+        where_clause="stream_id=%s", 
+        where_params=(stream_id,)
+    )
 
 async def main():
-    sqs_service = SQSService(queue_url=SQS_URL)
-    params = get_parameters_from_sqs(sqs_service)
-    stream_id = params["stream_id"] if params["stream_id"] else f"{uuid.uuid4()}"
-    stream_url = params["stream_url"] if params["stream_url"] else "./data/test_videos/news.mp4"
+    logger.info("[Main] trying to read the message from environment....")
+    # Parse job message
+    JOB_MESSAGE = os.environ.get("JOB_MESSAGE")
+    if JOB_MESSAGE is None:
+        logger.info("No JOB_MESSAGE provided. Exiting without work.")
+        return
+
+    try:
+        parsed_msg = json.loads(JOB_MESSAGE)
+    except (TypeError, json.JSONDecodeError):
+        logger.error("No JOB_MESSAGE provided. Exiting without work.")
+        return
+
+    logger.info(f"[Main] parsed job message.... {parsed_msg}")
+    
+    logger.info("[Main] connecting to db...")
+    await db_service.initialize()
+    logger.info("[Main] successfully connected to db...")
+
+    stream_id = parsed_msg["stream_id"] if parsed_msg["stream_id"] else f"{uuid.uuid4()}"
+    stream_url = parsed_msg["stream_url"] if parsed_msg["stream_url"] else "./data/test_videos/news.mp4"
+
+    await set_stream_status(stream_id, "IN_PROGRESS")
+
     start_time = time.time()
     # To signal async functions for stop
     stream_processor_event = threading.Event()
@@ -69,14 +94,18 @@ async def main():
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
+        await set_stream_status(stream_id, "COMPLETED")
+    except Exception as e:
+        await set_stream_status(stream_id, "FAILED", str(e))
     finally:
         stream_processor_event.set()
         print("Shutdown complete.")
         end_time = time.time()
-        logger.info(f"Total time taken by pipeline is: {end_time-start_time}s", )
+        logger.info(f"[Main] Total time taken by pipeline is: {end_time-start_time}s", )
 
 
 if __name__ == "__main__":
+    logger.info("Starting the pipeline....")
     try:
         asyncio.run(main())
     except Exception as e:
