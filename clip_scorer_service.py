@@ -8,7 +8,7 @@ from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from utils.helpers import run_sync_func, numpy_to_base64, EMPTY_STRING
+from utils.helpers import numpy_to_base64, EMPTY_STRING
 from config import (
     VIDEO_FRAME_SAMPLE_RATE, 
     BASE_DIR, 

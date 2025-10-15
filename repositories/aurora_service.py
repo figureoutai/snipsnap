@@ -286,14 +286,13 @@ class AuroraService:
             start_chunk: Optional starting frame index (inclusive)
             end_chunk: Optional ending frame index (inclusive)
             limit: Maximum number of records to return
-            order_by: Order clause (default: "frame_index ASC")
+            order_by: Order clause (default: "chunk_index ASC")
 
         Returns:
             List of dictionaries with video metadata
         """
         query = """
-            SELECT id, stream_id, filename, chunk_index, start_timestamp, end_timestamp
-                   sample_rate, transcript
+            SELECT id, stream_id, filename, chunk_index, start_timestamp, end_timestamp, sample_rate, transcript
             FROM audio_metadata
             WHERE stream_id = %s
         """
@@ -321,6 +320,32 @@ class AuroraService:
             results = await cursor.fetchall()
             return results
 
+    async def get_scored_clips_by_stream(self, stream_id: str, start_time: float, end_time: float, order_by="start_time ASC"):
+        """
+        Retrieve multiple score metadata records for a stream.
+
+        Args:
+            stream_id: The stream identifier
+            start_time: starting time for the record (inclusive)
+            end_time: ending time for the record (inclusive)
+            order_by: Order clause (default: "start_time ASC")
+        Returns:
+            List of dictionaries with video metadata
+        """
+        query = """
+            SELECT id, stream_id, start_time, end_time, saliency_score, highlight_score, caption
+            FROM score_metadata
+            WHERE stream_id = %s AND
+            start_time <= %s AND
+            end_time >= %s
+        """
+        query += f" ORDER BY {order_by}"
+        params = [stream_id, end_time, start_time]
+
+        async with self.get_connection() as cursor:
+            await cursor.execute(query, tuple(params))
+            results = await cursor.fetchall()
+            return results
 
     async def close(self):
         """Close the connection pool."""
