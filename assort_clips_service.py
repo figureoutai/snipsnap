@@ -3,6 +3,7 @@ import asyncio
 
 from config import STREAM_METADATA_TABLE
 from utils.logger import app_logger as logger
+from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
 
 class AssortClipsService:
@@ -88,7 +89,8 @@ class AssortClipsService:
                 highlight = {
                     "start_time": scored_clips[start_idx]["start_time"],
                     "end_time": scored_clips[end_idx]["end_time"],
-                    "caption": ' '.join(scored_clips[start_idx:end_idx+1])
+                    "caption": ' '.join(scored_clips[start_idx:end_idx+1]),
+                    "thumbnail": get_video_frame_filename(i),
                 }
                 highlights.append(highlight)
 

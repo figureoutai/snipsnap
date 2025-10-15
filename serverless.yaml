@@ -481,10 +481,8 @@ resources:
                   Resource: "*"
                 - Effect: Allow
                   Action:
-                    - transcribe:StartTranscriptionJob
-                    - transcribe:GetTranscriptionJob
-                    - transcribe:DeleteTranscriptionJob
-                    - transcribe:ListTranscriptionJobs
+                    - transcribe:StartStreamTranscription
+                    - transcribe:StartStreamTranscriptionWebSocket
                   Resource: "*"
                 - Effect: Allow
                   Action:

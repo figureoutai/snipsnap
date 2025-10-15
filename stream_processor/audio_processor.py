@@ -105,7 +105,7 @@ class AudioChunker:
             self.s3_writer.upload_audio_nowait(stream_id, file_path=filepath)
 
             # store metadata into Aurora SQL DB
-            self.db_writer.insert_dict_nowait(AUDIO_METADATA_TABLE_NAME, metadata)
+            await self.db_writer.insert_dict(AUDIO_METADATA_TABLE_NAME, metadata)
 
             logger.info(f"[AudioChunker] Wrote chunk {os.path.basename(filepath)}")
         except Exception as e:
@@ -127,7 +127,7 @@ class AudioProcessor:
         self.frames_q = audio_frame_q
 
     async def process_frames(self, stream_id: str, audio_processor_event: asyncio.Event, stream_processor_event: threading.Event):
-        logger.info("[AudioProcessor] started to sample the video frames")
+        logger.info("[AudioProcessor] started to sample the audio frames")
 
         while True:
             if audio_processor_event.is_set() or (stream_processor_event.is_set() and self.frames_q.empty()):
@@ -140,13 +140,13 @@ class AudioProcessor:
 
             frame: AudioFrame = await self.frames_q.get()
             try:
-                asyncio.create_task(self.chunker.handle_frame(stream_id, frame))
+                await self.chunker.handle_frame(stream_id, frame)
             except Exception as e:
                 logger.error(f"[AudioProcessor] Audio worker error: {e}")
 
         # Flush chunker for any leftover chunks
         try:
-            asyncio.create_task(self.chunker.flush_chunk(stream_id))
+            await self.chunker.flush_chunk(stream_id)
         except Exception as e:
             logger.error(f"[AudioProcessor] Error flushing chunk on shutdown: {e}")
 

@@ -101,7 +101,7 @@ class VideoProcessor:
                 "height": getattr(frame, "height", None),
             }
             
-            self.db_writer.insert_dict_nowait(VIDEO_METADATA_TABLE_NAME, metadata)
+            await self.db_writer.insert_dict(VIDEO_METADATA_TABLE_NAME, metadata)
         
             self.frame_index += 1
             self.last_saved_pts = ts
