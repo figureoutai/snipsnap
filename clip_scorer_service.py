@@ -142,7 +142,7 @@ class ClipScorerService:
                     await asyncio.sleep(0.2)
                     continue
             
-            score = self.get_slice_saliency_score(start_time, end_time, base_path)
+            score = self.get_slice_saliency_score(start_time, end_time, base_path) # BUG: is this called right?
             highlight_score, caption = await run_sync_func(self.caption_service.generate_clip_caption, candidate_clip, audio_metadata)
             metadata = {
                 "stream_id": stream_id,
