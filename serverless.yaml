@@ -556,7 +556,7 @@ resources:
             - Type: VCPU
               Value: "1"
             - Type: MEMORY
-              Value: "6144"
+              Value: "8192"
           Environment:
             - Name: SECRET_NAME
               Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
