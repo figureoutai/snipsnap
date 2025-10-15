@@ -332,6 +332,88 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
+    # Frontend static hosting bucket (served via CloudFront)
+    FrontendBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub ${self:service}-${self:custom.stage}-frontend-${AWS::AccountId}
+        VersioningConfiguration:
+          Status: Enabled
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        Tags:
+          - Key: ${self:custom.tagKey}
+            Value: ${self:custom.tagValue}
+
+    FrontendOriginAccessControl:
+      Type: AWS::CloudFront::OriginAccessControl
+      Properties:
+        OriginAccessControlConfig:
+          Name: !Sub ${self:service}-${self:custom.stage}-oac
+          Description: Access control for CloudFront to S3 frontend bucket
+          OriginAccessControlOriginType: s3
+          SigningBehavior: always
+          SigningProtocol: sigv4
+
+    FrontendDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Enabled: true
+          DefaultRootObject: index.html
+          Comment: !Sub ${self:service}-${self:custom.stage}-frontend
+          PriceClass: PriceClass_100
+          HttpVersion: http2
+          Origins:
+            - Id: FrontendS3Origin
+              DomainName: !GetAtt FrontendBucket.RegionalDomainName
+              S3OriginConfig: {}
+              OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+          DefaultCacheBehavior:
+            TargetOriginId: FrontendS3Origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed: CachingOptimized
+          CustomErrorResponses:
+            - ErrorCode: 403
+              ResponsePagePath: /index.html
+              ResponseCode: 200
+              ErrorCachingMinTTL: 0
+            - ErrorCode: 404
+              ResponsePagePath: /index.html
+              ResponseCode: 200
+              ErrorCachingMinTTL: 0
+
+    FrontendBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref FrontendBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowCloudFrontRead
+              Effect: Allow
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !GetAtt FrontendBucket.Arn
+                - !Sub ${FrontendBucket.Arn}/*
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution.Id}
+
     ContainerRepository:
       Type: AWS::ECR::Repository
       Properties:
@@ -544,3 +626,20 @@ resources:
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
+  Outputs:
+    FrontendBucketName:
+      Value: !Ref FrontendBucket
+      Export:
+        Name: !Sub ${self:service}-${self:custom.stage}-FrontendBucketName
+    FrontendBucketArn:
+      Value: !GetAtt FrontendBucket.Arn
+      Export:
+        Name: !Sub ${self:service}-${self:custom.stage}-FrontendBucketArn
+    FrontendDistributionId:
+      Value: !GetAtt FrontendDistribution.Id
+      Export:
+        Name: !Sub ${self:service}-${self:custom.stage}-FrontendDistributionId
+    FrontendDistributionDomainName:
+      Value: !GetAtt FrontendDistribution.DomainName
+      Export:
+        Name: !Sub ${self:service}-${self:custom.stage}-FrontendDistributionDomain

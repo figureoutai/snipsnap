@@ -104,5 +104,8 @@ class SaliencyScorer:
     - Ranking and Output
 
 ### Deploy
-Running `./deploy.sh` updates infra by running serverless and updates ecr image and deploys aws batch
-To only update ecr and aws batch do `./deploy.sh --image-only`
+Running `./deploy.sh` deploys everything, frontend, backend and infra
+deploy.sh
+- --frontend: build Vite app, upload to S3, invalidate CloudFront.
+- --infra-only: only serverless deploy.
+- --image-only: only build/push the ECR image.
