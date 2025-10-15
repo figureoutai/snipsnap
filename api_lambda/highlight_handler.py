@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
+FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
 
 # Global pool (shared across invocations)
 db_service: AuroraService | None = None
@@ -38,6 +39,14 @@ async def get_highlights_by_stream(stream_id: str):
     logger.info("successfully connected to db")
     return await service.get_highlights_by_stream(stream_id)
 
+def _cors_headers():
+    return {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    }
+
 
 def get_highlights(event, context):
     try:
@@ -50,7 +59,7 @@ def get_highlights(event, context):
 
         return  {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(),
             "body": json.dumps(result),
         }
 
@@ -58,6 +67,6 @@ def get_highlights(event, context):
         logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(),
             "body": json.dumps({"ok": False, "error": str(e)}),
         }

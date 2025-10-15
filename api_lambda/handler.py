@@ -26,8 +26,18 @@ SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
+FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
 
 print("version 2")
+
+
+def _cors_headers():
+    return {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    }
 
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
     # Create a Secrets Manager client
@@ -126,7 +136,7 @@ def video_receiver(event, context):
         }
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(),
             "body": json.dumps(resp),
         }
 
@@ -134,6 +144,6 @@ def video_receiver(event, context):
         logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(),
             "body": json.dumps({"ok": False, "error": str(e)}),
         }
