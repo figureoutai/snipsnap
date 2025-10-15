@@ -1,4 +1,5 @@
 import av
+import asyncio
 
 from threading import Event
 from av.stream import Disposition
@@ -16,7 +17,7 @@ class StreamProcessor:
         self.stream_url = url
         self.max_seconds = MAX_STREAM_DURATION
 
-    def start_stream(self, stream_processor_event: Event):
+    def start_stream(self, loop, stream_processor_event: Event):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
         try:
             with av.open(self.stream_url) as container:
@@ -47,9 +48,9 @@ class StreamProcessor:
                                     stream_processor_event.set()
                                     return
                             if packet.stream.type == "video":
-                                self.video_frame_q.put_nowait(frame)
+                                loop.call_soon_threadsafe(self.video_frame_q.put_nowait, frame)
                             elif packet.stream.type == "audio":
-                                self.audio_frame_q.put_nowait(frame)
+                                loop.call_soon_threadsafe(self.audio_frame_q.put_nowait, frame)
                     except Exception as e:
                         logger.error(f"[Stream Processor] Error decoding packet: {e}")
                         continue

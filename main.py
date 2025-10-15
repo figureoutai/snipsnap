@@ -69,7 +69,7 @@ async def main():
     assort_clips_service = AssortClipsService()
 
 
-    stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
+    stream_task = threading.Thread(target=stream_processor.start_stream, args=(loop, stream_processor_event,), daemon=True)
     stream_task.start()
 
     tasks = [

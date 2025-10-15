@@ -87,6 +87,7 @@ class VideoProcessor:
                 
                 if not os.path.exists(filepath):
                     img.save(filepath, format="JPEG")
+                del img
             except Exception as e:
                 print("Error saving video frame:", e)
                 return
