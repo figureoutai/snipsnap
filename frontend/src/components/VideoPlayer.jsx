@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toSeconds, formatTime } from '../utils/time.js';
+import "../styles/videoPlayer.css";
 
 export default function VideoPlayer({ src, ranges = [] }) {
   const videoRef = useRef(null);
