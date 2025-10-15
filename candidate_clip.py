@@ -30,7 +30,7 @@ class CandidateClip:
         audios = []
         for c in chunks:
             filepath = f"{self.base_path}/audio_chunks/{get_audio_filename(c)}"
-            if not os.path.exists():
+            if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] audio chunk does not exist {os.path.basename(filepath)}")
                 continue
             container = av.open(filepath)
@@ -53,7 +53,7 @@ class CandidateClip:
         images = []
         for i in range(self.start_time, self.end_time * VIDEO_FRAME_SAMPLE_RATE):
             filepath = f"{self.base_path}/frames/{get_video_frame_filename(i)}"
-            if not os.path.exists():
+            if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] video frame does not exist {os.path.basename(filepath)}")
                 continue
             images.append(cv2.imread(filename=filepath))
