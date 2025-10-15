@@ -1,6 +1,6 @@
 import os
 AWS_REGION = "us-east-1"
-LANGUAGE_CODE="en"
+LANGUAGE_CODE="en-US"
 
 S3_BUCKET_NAME = "highlight-clipping-service-main-975049899047"
 S3_REGION = "us-east-1"
