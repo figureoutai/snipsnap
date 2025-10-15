@@ -47,9 +47,9 @@ class StreamProcessor:
                                     stream_processor_event.set()
                                     return
                             if packet.stream.type == "video":
-                                self.video_frame_q.put()
+                                self.video_frame_q.put(frame)
                             elif packet.stream.type == "audio":
-                                self.audio_frame_q.put()
+                                self.audio_frame_q.put(frame)
                     except Exception as e:
                         logger.error(f"[Stream Processor] Error decoding packet: {e}")
                         continue
