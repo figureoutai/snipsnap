@@ -24,6 +24,7 @@ class CaptionService:
 
     async def generate_clip_caption(self, candidate_clip: CandidateClip, audio_metadata: List):
         transcript = candidate_clip.get_transcript(audio_metadata)
+        logger.info(f"[CaptionService] transcript: {transcript}")
         images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
         response = self.llm.invoke(prompt="", response_type="json", query=transcript, images=images, max_tokens=500)
         return response["highlight_score"], response["caption"]
