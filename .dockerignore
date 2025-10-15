@@ -43,7 +43,8 @@ node_modules/
 
 # Serverless Lambda project
 api_lambda/
+frontend/
 
 # Local datasets / media / unused assets
-data/
+# data commenting it out for test
 workflow.png

@@ -8,7 +8,7 @@ from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from utils.helpers import run_sync_func, numpy_to_base64, EMPTY_STRING
+from utils.helpers import numpy_to_base64, EMPTY_STRING
 from config import (
     VIDEO_FRAME_SAMPLE_RATE, 
     BASE_DIR, 
@@ -18,14 +18,75 @@ from config import (
     SCORE_METADATA_TABLE
 )
 
+CAPTION_AND_SCORER_PROMPT = """
+    You are an expert video editor and content curator.
+    Your task is to judge if a given set of video frames (images) and the corresponding audio transcript represent a highlight-worthy moment.
+
+    ## You should analyze:
+        1. What's visually happening in the frames (motion, emotion, action, etc.)
+        2. The spoken content in the transcript (emotion, importance, excitement, etc.)
+
+    ## Then return:
+        1. A caption (a short, descriptive summary of what's happening)
+        2. A highlight_score between 0 and 1 (with 1 decimal place), where:
+            - 1.0 → Extremely highlight-worthy (exciting, emotional, visually or contextually important)
+            - 0.0 → Not a highlight at all (irrelevant, static, repetitive, or dull)
+
+    ## Examples:-
+
+        Example 1:
+            Frames description: [Image of soccer player dribbling, Image of goal kick, Image of cheering crowd]
+            Transcript: “And he shoots—what a goal! Unbelievable finish from Ronaldo!”
+            Output:
+            {
+                "caption": "Ronaldo scores a spectacular goal after dribbling past defenders",
+                "highlight_score": 1.0
+            }
+
+        Example 2:
+            Frames description: [Image of players walking off the field, Image of empty stadium seats]
+            Transcript: "We\'ll be back after the break."
+            Output:
+            {
+                "caption": "Players taking a break before the next round",
+                "highlight_score": 0.1
+            }
+
+        Example 3:
+            Frames description: [Image of presenter on stage, Image of confetti, Image of cheering crowd]
+            Transcript: "And the winner is… Team Alpha!"
+            Output:
+            {
+                "caption": "Team Alpha announced as the winner amid cheers",
+                "highlight_score": 0.9
+            }
+
+        Example 4:
+            Frames : [Image of person talking calmly during an interview]
+            Transcript: "So we started the project in 2018 with just five people."
+            Output:
+            {
+                "caption": "Speaker describes the project's early beginnings",
+                "highlight_score": 0.3
+            }
+
+    ## Output format (JSON):
+        {
+            "caption": "...",
+            "highlight_score": ...
+        }
+    **Note**: Do not add anything extra to the output.
+"""
+
 class CaptionService:
     def __init__(self):
         self.llm = Claude()
 
     async def generate_clip_caption(self, candidate_clip: CandidateClip, audio_metadata: List):
         transcript = candidate_clip.get_transcript(audio_metadata)
+        logger.info(f"[CaptionService] transcript: {transcript}")
         images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
-        response = self.llm.invoke(prompt="", response_type="json", query=transcript, images=images, max_tokens=500)
+        response = self.llm.invoke(prompt=CAPTION_AND_SCORER_PROMPT, response_type="json", query=transcript, images=images, max_tokens=500)
         return response["highlight_score"], response["caption"]
 
 
@@ -142,8 +203,8 @@ class ClipScorerService:
                     await asyncio.sleep(0.2)
                     continue
             
-            score = self.get_slice_saliency_score(start_time, end_time, base_path) # BUG: is this called right?
-            highlight_score, caption = await run_sync_func(self.caption_service.generate_clip_caption, candidate_clip, audio_metadata)
+            score = self.get_slice_saliency_score(candidate_clip)
+            highlight_score, caption = await self.caption_service.generate_clip_caption(candidate_clip, audio_metadata)
             metadata = {
                 "stream_id": stream_id,
                 "start_time": start_time,

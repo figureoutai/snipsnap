@@ -13,15 +13,12 @@ SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-def get_highlights(event, context):
-    try:
-        query_params = event.get('queryStringParameters')
-        if "stream_id" not in query_params:
-            raise KeyError("stream_id not found in Query Parameters.")
-        stream_id = query_params["stream_id"]
+# Global pool (shared across invocations)
+db_service: AuroraService | None = None
 
-        logger.info("connecting to db")
-
+async def init_db():
+    global db_service
+    if db_service is None:
         secrets = get_secret(SECRET_NAME)
         db_service = AuroraService(
             host=DB_URL,
@@ -29,11 +26,25 @@ def get_highlights(event, context):
             password=secrets["password"],
             database=DB_NAME,
         )
-        asyncio.run(db_service.initialize())
+        await db_service.initialize()
+    return db_service
 
-        logger.info("successfully connected to db.")
 
-        result = asyncio.run(db_service.get_highlights_by_stream(stream_id))
+async def get_highlights_by_stream(stream_id: str):
+    logger.info("connecting to db")
+    service = await init_db()
+    logger.info("successfully connected to db")
+    return await service.get_highlights_by_stream(stream_id)
+
+
+def get_highlights(event, context):
+    try:
+        query_params = event.get('queryStringParameters')
+        if "stream_id" not in query_params:
+            raise KeyError("stream_id not found in Query Parameters.")
+        stream_id = query_params["stream_id"]
+
+        result = asyncio.run(get_highlights_by_stream(stream_id))
 
         return  {
             "statusCode": 200,

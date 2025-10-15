@@ -25,12 +25,12 @@ class CandidateClip:
         return list(range(start_chunk, end_chunk + 1))
 
     def load_audio_segment(self, chunk_duration):
-        chunks = self.get_audio_chunk_indexes(self.start_time, self.end_time, chunk_duration)
+        chunks = self.get_audio_chunk_indexes(chunk_duration)
         sr = 0
         audios = []
         for c in chunks:
             filepath = f"{self.base_path}/audio_chunks/{get_audio_filename(c)}"
-            if not os.path.exists():
+            if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] audio chunk does not exist {os.path.basename(filepath)}")
                 continue
             container = av.open(filepath)
@@ -53,7 +53,7 @@ class CandidateClip:
         images = []
         for i in range(self.start_time, self.end_time * VIDEO_FRAME_SAMPLE_RATE):
             filepath = f"{self.base_path}/frames/{get_video_frame_filename(i)}"
-            if not os.path.exists():
+            if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] video frame does not exist {os.path.basename(filepath)}")
                 continue
             images.append(cv2.imread(filename=filepath))

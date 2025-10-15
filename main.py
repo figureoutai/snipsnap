@@ -8,13 +8,14 @@ import threading
 
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
+from clip_scorer_service import ClipScorerService
 from config import BASE_DIR, STREAM_METADATA_TABLE
+from assort_clips_service import AssortClipsService
 from repositories.aurora_service import AuroraService
 from utils.unique_async_queue import UniqueAsyncQueue
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
-from clip_scorer_service import ClipScorerService
 
 db_service = AuroraService()
 
@@ -65,8 +66,10 @@ async def main():
     audio_processor = AudioProcessor(f"{BASE_DIR}/{stream_id}/audio_chunks", audio_frame_q)
     audio_transcriber = AudioTranscriber(f"{BASE_DIR}/{stream_id}/audio_chunks")
     clip_scorer = ClipScorerService()
+    assort_clips_service = AssortClipsService()
 
-    stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
+
+    stream_task = threading.Thread(target=stream_processor.start_stream, args=(loop, stream_processor_event,), daemon=True)
     stream_task.start()
 
     tasks = [
@@ -74,6 +77,7 @@ async def main():
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
         asyncio.create_task(audio_transcriber.transcribe_audio(stream_id, audio_processor_event)),
         asyncio.create_task(clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event)),
+        asyncio.create_task(assort_clips_service.assort_clips(stream_id, audio_processor_event, video_processor_event))
     ]
 
     def _signal_handler(signum, frame):

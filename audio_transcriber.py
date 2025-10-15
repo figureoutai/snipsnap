@@ -6,9 +6,9 @@ import aiofiles
 from asyncio import Event
 from utils.logger import app_logger as logger
 from repositories.aurora_service import AuroraService
-from config import AWS_REGION, LANGUAGE_CODE, AUDIO_METADATA_TABLE_NAME
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
+from config import AWS_REGION, LANGUAGE_CODE, AUDIO_METADATA_TABLE_NAME
 from amazon_transcribe.model import TranscriptEvent, StartStreamTranscriptionEventStream
 
 
@@ -88,11 +88,11 @@ class AudioTranscriber:
                 event_handler = TranscriptEventHandler(stream_id, filename, transcription_stream.output_stream)
                 await asyncio.gather(self.send_audio_chunks(filepath, transcription_stream), event_handler.handle_events())
 
-            start_chunk = chunk["chunk_index"] + 1
+            start_chunk = start_chunk if len(audio_chunks) == 0 else audio_chunks[-1]["chunk_index"] + 1
 
             await asyncio.sleep(2)
 
-    async def send_audio_chunks(filepath: str, transcription_stream: StartStreamTranscriptionEventStream):
+    async def send_audio_chunks(self, filepath: str, transcription_stream: StartStreamTranscriptionEventStream):
         async with aiofiles.open(filepath, 'rb') as audio_file:
             chunk_size = 1024 * 16
             while True:
