@@ -82,12 +82,12 @@ class S3Service:
     ) -> str:
         """Generate S3 key with optional timestamp."""
         if add_timestamp:
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             name = Path(filename).stem
             ext = Path(filename).suffix
-            filename = f"{name}_{timestamp}{ext}"
+            # filename = f"{name}_{timestamp}{ext}"
+            filename = f"{name}{ext}"
 
-        return f"{prefix}{stream_id}/{filename}"
+        return f"{stream_id}/{prefix}{filename}"
 
     async def upload_audio(
         self,
