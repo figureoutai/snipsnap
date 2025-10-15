@@ -1,12 +1,13 @@
 import os
+import queue
 import asyncio
 import threading
 
+from queue import Queue
 from PIL import Image
 from av import VideoFrame
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
-from utils.unique_async_queue import UniqueAsyncQueue
 from repositories.aurora_service import AuroraService
 from repositories.s3_service import S3Service
 from config import AUDIO_BUCKET_PREFIX, IMAGE_BUCKET_PREFIX, S3_BUCKET_NAME, S3_REGION, VIDEO_METADATA_TABLE_NAME
@@ -15,7 +16,7 @@ class VideoProcessor:
     def __init__(
         self,
         output_dir: str,
-        video_frame_q: UniqueAsyncQueue,
+        video_frame_q: Queue,
         video_frame_sample_rate: int = 2,
     ):
         self.sample_rate = video_frame_sample_rate
@@ -35,10 +36,17 @@ class VideoProcessor:
             audio_prefix=AUDIO_BUCKET_PREFIX,
             image_prefix=IMAGE_BUCKET_PREFIX,
         )
-        
+    
+    def _read_frame(self):
+        frame: VideoFrame = None
+        try:
+            frame = self.frames_q.get(timeout=0.5)
+        except queue.Empty as e:
+            logger.info("[VideoProcessor] queue is empty")
+
+        return frame
         
     async def intialize_db_writer(self):
-
         if not self.is_db_writer_initialized:
             logger.info("Initializing DB Connection in VideoProcessor")
             await self.db_writer.initialize()
@@ -59,7 +67,11 @@ class VideoProcessor:
                 await asyncio.sleep(0.2)
                 continue
 
-            frame: VideoFrame = await self.frames_q.get()
+            frame: VideoFrame = self._read_frame()
+
+            if frame is None:
+                await asyncio.sleep(0.2)
+                continue
 
             ts = float(frame.pts * frame.time_base) if frame.pts is not None else 0.0
             ts = round(ts, 3)

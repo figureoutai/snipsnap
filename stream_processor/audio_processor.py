@@ -1,6 +1,7 @@
 import os
 import av
 import time
+import queue
 import asyncio
 import threading
 
@@ -120,11 +121,20 @@ class AudioProcessor:
     def __init__(
         self,
         audio_chunk_dir,
-        audio_frame_q: UniqueAsyncQueue,
+        audio_frame_q: queue.Queue,
         audio_chunk_duration_in_secs=5,
     ):
         self.chunker = AudioChunker(audio_chunk_dir, audio_chunk_duration_in_secs)
         self.frames_q = audio_frame_q
+
+    def _read_frame(self):
+        frame: AudioFrame = None
+        try:
+            frame = self.frames_q.get(timeout=0.5)
+        except queue.Empty as e:
+            logger.info("[AudioProcessor] queue is empty")
+
+        return frame
 
     async def process_frames(self, stream_id: str, audio_processor_event: asyncio.Event, stream_processor_event: threading.Event):
         logger.info("[AudioProcessor] started to sample the audio frames")
@@ -134,11 +144,11 @@ class AudioProcessor:
                 logger.info("[AudioProcessor] stop event was set")
                 break
 
-            if self.frames_q.empty():
+            frame: AudioFrame = self._read_frame()
+
+            if frame is None:
                 await asyncio.sleep(0.2)
                 continue
-
-            frame: AudioFrame = await self.frames_q.get()
             try:
                 await self.chunker.handle_frame(stream_id, frame)
             except Exception as e:
