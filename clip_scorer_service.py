@@ -168,10 +168,7 @@ class ClipScorerService:
     def _get_slice(self, i):
         start = i * CANDIDATE_SLICE
         end = start + CANDIDATE_SLICE
-        if start > 0:
-            return start - STEP_BACK, end - STEP_BACK
-        else:
-            return 0, 5
+        return start, end
     
     async def score_clips(self, stream_id, clip_scorer_event: asyncio.Event, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
         base_path = f"{BASE_DIR}/{stream_id}"

@@ -155,6 +155,10 @@ class AssortClipsService:
 
         return consolidated
     
+    async def has_more_clips(self, stream_id, end_time):
+        return await self.db_service.has_more_entries_after(stream_id, end_time)
+
+    
     async def assort_clips(self, stream_id, clip_scorer_event: asyncio.Event):
         should_break = False
         i = 0
@@ -166,8 +170,14 @@ class AssortClipsService:
             
             scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+300)
 
-            if len(scored_clips) < 100:
+            if len(scored_clips) < 60:
                 if clip_scorer_event.is_set():
+                    if len(scored_clips) == 0:
+                        should_break = True
+                    elif await self.db_service.has_more_entries_after(stream_id, scored_clips[-1]["end_time"]):
+                        logger.info("[AssortClipsService] clip scorer has exited but have more clips to process, fetching them")
+                        continue
+                    logger.info("[AssortClipsService] no more clips to be fetched, can safely break in next iteration")
                     should_break = True
                 else:
                     logger.info("[AssortClipsService] waiting for data to become available...")
@@ -197,7 +207,7 @@ class AssortClipsService:
                         "start_time": scored_clips[l]["start_time"],
                         "end_time": scored_clips[r]["end_time"],
                         "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
-                        "thumbnail": get_video_frame_filename(i),
+                        "thumbnail": get_video_frame_filename(l),
                         "title": group["title"]
                     }
                     highlights.append(highlight)
