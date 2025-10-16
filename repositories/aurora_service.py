@@ -359,18 +359,18 @@ class AuroraService:
             True if more entries exist after the given end_time, False otherwise.
         """
         query = """
-            SELECT EXISTS(
-                SELECT 1
-                FROM score_metadata
-                WHERE stream_id = %s AND start_time > %s
-            )
+            SELECT *
+            FROM score_metadata
+            WHERE stream_id = %s AND start_time > %s
+            LIMIT 1
         """
         params = [stream_id, end_time]
 
         async with self.get_connection() as cursor:
             await cursor.execute(query, tuple(params))
-            result = await cursor.fetchone()
-            return result[0] if result else False
+            row = await cursor.fetchone()
+            logger.info("[AuroraService] - has_more_entries - {row}")
+            return True if row else False
 
     async def close(self):
         """Close the connection pool."""
