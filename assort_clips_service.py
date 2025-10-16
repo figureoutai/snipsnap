@@ -9,14 +9,17 @@ from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
 
 GROUPING_AND_TITLE_PROMPT = """
-    You are an AI assistant that groups sentences describing the same event. Follow these steps for each input:
-        1. Read all sentences carefully.
-        2. Compare each sentence to identify which sentences belong to the same event.
-        3. Think step-by-step as you decide which sentences belong together.
-        4. Assign sentences to groups.
-        5. Give each group a short descriptive title.
-        6. For each group, return only the start and the end indexes (0-based) of the sentences in that group. If there is only one sentence the start and end index will be the same. 
-        7. Return the output as a valid JSON format exactly like the example below. No need to return the reasoning.
+    You are an AI assistant that groups sentences describing the same event. 
+    You will be given a sequence of sentences in order describing the scenes from a video. Follow these steps for each input:
+        1. Read the full list of sentences.
+        2. Compare adjacent sentences and decide whether each pair belongs to the same event.
+        3. Merge contiguous sentences into a group when they describe the same event.
+        4. Each group must be contiguous (consecutive indexes).
+        5. Give each group a short descriptive title (3-6 words is ideal).
+        6. Return only a valid JSON object with a top-level key "groups" whose value is a list of groups. Each group is an object with "title" and "indexes" (0-based list of integers).
+        7. Do not output any reasoning, explanations, or extra text — only the JSON.
+        8. If a sentence is unique (not contiguous with same-event neighbors), it becomes a single-item group.
+        9. Think step-by-step internally but do not reveal your chain-of-thought.
 
     ---
 
@@ -30,7 +33,7 @@ GROUPING_AND_TITLE_PROMPT = """
 
         Step-by-step reasoning:
             - Sentence 0 describes a brawl between Swans and Lions fans at a stadium.
-            - Sentence 1 describes the same brawl, just from a reporter’s perspective.
+            - Sentence 1 describes the same brawl, just from a reporter's perspective.
             - Sentence 2 is unrelated, about a beach volleyball event.
             - Therefore, sentences 0 and 1 belong to one group, and sentence 2 belongs to another group.
 
@@ -72,7 +75,7 @@ GROUPING_AND_TITLE_PROMPT = """
                 },
                 {
                     "title": "Football championship celebration",
-                    "indexes": [2, 2]
+                    "indexes": [2]
                 }
             ]
         }
@@ -82,15 +85,15 @@ GROUPING_AND_TITLE_PROMPT = """
             "groups": [
                 {
                     "title": "Downtown apartment fire",
-                    "indexes": [0, 1]
+                    "indexes": [0, 1, 3]
                 },
                 {
                     "title": "Football championship celebration",
-                    "indexes": [2, 2]
+                    "indexes": [2]
                 },
                 {
                     "title": "Goal highlights",
-                    "indexes": [3, 8]
+                    "indexes": [4, 5, 6, 7, 8]
                 }
             ]
         }
@@ -189,7 +192,7 @@ class AssortClipsService:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
                 logger.info(f"[AssortClipsService] grouping from llm {groups}")
                 for group in groups:
-                    l, r = (group["indexes"][0], group["indexes"][1]) if len(group["indexes"]) == 2 else (group["indexes"][0], group["indexes"][0])
+                    l, r = group["indexes"][0], group["indexes"][-1]
                     highlight = {
                         "start_time": scored_clips[l]["start_time"],
                         "end_time": scored_clips[r]["end_time"],
