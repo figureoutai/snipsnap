@@ -174,6 +174,7 @@ class AssortClipsService:
                 if clip_scorer_event.is_set():
                     if len(scored_clips) == 0:
                         should_break = True
+                        continue
                     elif await self.db_service.has_more_entries_after(stream_id, scored_clips[-1]["end_time"]):
                         logger.info("[AssortClipsService] clip scorer has exited but have more clips to process, fetching them")
                         continue

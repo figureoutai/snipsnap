@@ -214,6 +214,8 @@ class ClipScorerService:
             if (len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE) or (len(audio_metadata) != len(audio_chunk_indexes)):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
                     should_break = True
+                    if not audio_metadata or not frame_metdata:
+                        continue
                 else:
                     await asyncio.sleep(0.2)
                     continue
