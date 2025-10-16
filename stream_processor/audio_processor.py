@@ -130,8 +130,8 @@ class AudioProcessor:
     def _read_frame(self):
         frame: AudioFrame = None
         try:
-            frame = self.frames_q.get(timeout=0.5)
-        except queue.Empty as e:
+            frame = self.frames_q.get(timeout=0.2)
+        except queue.Empty:
             logger.info("[AudioProcessor] queue is empty")
 
         return frame

@@ -13,6 +13,11 @@ from .aurora_service import AuroraService
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Global pool (shared across invocations)
+db_service: AuroraService | None = None
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
 
 batch = boto3.client("batch")
 JOB_QUEUE = os.environ["BATCH_JOB_QUEUE"]
@@ -43,9 +48,6 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
 
     except Exception as e:
         logger.error(f"❌ The requested secret {secret_name} was not found")
-
-# Global pool (shared across invocations)
-db_service: AuroraService | None = None
 
 async def init_db():
     global db_service
@@ -99,7 +101,7 @@ def video_receiver(event, context):
             "status": "SUBMITTED"
         }
 
-        asyncio.run(insert_dict(STREAM_METADATA_TABLE, stream_metadata))
+        loop.run_until_complete(insert_dict(STREAM_METADATA_TABLE, stream_metadata))
 
         try:
             submission = batch.submit_job(

@@ -7,8 +7,9 @@ from typing import List
 from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
+from audio_transcriber import AudioTranscriber
 from repositories.aurora_service import AuroraService
-from utils.helpers import numpy_to_base64, EMPTY_STRING
+from utils.helpers import numpy_to_base64, EMPTY_STRING, ERROR_STRING
 from config import (
     VIDEO_FRAME_SAMPLE_RATE, 
     BASE_DIR, 
@@ -86,7 +87,7 @@ class CaptionService:
         transcript = candidate_clip.get_transcript(audio_metadata)
         logger.info(f"[CaptionService] transcript: {transcript}")
         images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
-        response = self.llm.invoke(prompt=CAPTION_AND_SCORER_PROMPT, response_type="json", query=transcript, images=images, max_tokens=500)
+        response = await self.llm.invoke(prompt=CAPTION_AND_SCORER_PROMPT, response_type="json", query=transcript, images=images, max_tokens=500)
         return response["highlight_score"], response["caption"]
 
 
@@ -132,7 +133,6 @@ class SaliencyScorer:
         )
         return float(saliency)
 
-
 class ClipScorerService:
     def __init__(self):
         self.scorer = SaliencyScorer()
@@ -145,6 +145,20 @@ class ClipScorerService:
             logger.info("[AudioTranscriber] Initializing DB Connection")
             await self.db_service.initialize()
             self.is_db_service_initialized = True
+
+    async def transcribe_leftover_audio_chunks(self, stream_id, audio_chunks):
+        transcriber = AudioTranscriber(f"{BASE_DIR}/{stream_id}/audio_chunks")
+        for chunk in audio_chunks:
+            if chunk["transcript"] == ERROR_STRING:
+                filename = chunk["filename"]
+                sample_rate = chunk["sample_rate"]
+                try:
+                    logger.info(f"[ClipScorerService] transcribing audio for leftover {filename}")
+                    await transcriber.transcribe_audio_stream(stream_id, filename, sample_rate)
+                except Exception as e:
+                    logger.error(f"[ClipScorerService] encountered error while transcribing audio {filename}: {str(e)}")
+
+            
     
     def get_slice_saliency_score(self, candidate_clip: CandidateClip):
         audio = candidate_clip.load_audio_segment(AUDIO_CHUNK)
@@ -166,11 +180,13 @@ class ClipScorerService:
         await self.intialize_db_service()
         while True:
             if should_break:
-                logger.info("[SaliencyScorerService] exiting saliency scorer service.")
+                logger.info("[ClipScorerService] exiting saliency scorer service.")
                 break
             start_time, end_time = self._get_slice(i)
             candidate_clip = CandidateClip(base_path, start_time, end_time)
             audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
+
+            logger.info(f"[ClipScorerService] scoring for interval {start_time} - {end_time}.")
 
             audio_metadata = []
             if len(audio_chunk_indexes) == 1:
@@ -186,7 +202,8 @@ class ClipScorerService:
                     end_chunk=audio_chunk_indexes[1]
                 )
 
-            if not all([meta["transcript"] != EMPTY_STRING for meta in audio_metadata]):
+            if not all([((meta["transcript"] != EMPTY_STRING) and (meta["transcript"] != ERROR_STRING)) for meta in audio_metadata]):
+                await self.transcribe_leftover_audio_chunks(stream_id, audio_metadata)
                 await asyncio.sleep(0.5)
                 continue
 

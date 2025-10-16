@@ -40,8 +40,8 @@ class VideoProcessor:
     def _read_frame(self):
         frame: VideoFrame = None
         try:
-            frame = self.frames_q.get(timeout=0.5)
-        except queue.Empty as e:
+            frame = self.frames_q.get(timeout=0.2)
+        except queue.Empty:
             logger.info("[VideoProcessor] queue is empty")
 
         return frame

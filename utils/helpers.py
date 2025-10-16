@@ -11,7 +11,8 @@ import numpy as np
 
 from .logger import app_logger as logger
 
-EMPTY_STRING = "EMPTY"
+EMPTY_STRING = "!EMPTY!"
+ERROR_STRING = "!ERROR!"
 
 def get_audio_filename(idx: int):
     return f"audio_{idx:06d}.wav"
@@ -95,46 +96,38 @@ def timeit(func):
         return result
     return wrapper
 
+import asyncio, functools, random, time
+from utils.logger import app_logger as logger
 
 def retry_with_backoff(
-    retries=3,
-    backoff_in_seconds=1,
-    max_backoff_in_seconds=60,
-    exceptions=(Exception,),
-    jitter=True,
+    retries=3, 
+    backoff_in_seconds=1, 
+    max_backoff_in_seconds=60, 
+    exceptions=(Exception,), 
+    jitter=True
 ):
-    """
-    Decorator to retry a function with exponential backoff.
-    
-    Args:
-        retries (int): Number of retry attempts before giving up.
-        backoff_in_seconds (int): Initial backoff delay in seconds.
-        max_backoff_in_seconds (int): Max sleep time between retries.
-        exceptions (tuple): Exceptions to catch for retry.
-        jitter (bool): If True, add randomness to backoff (recommended).
-    """
+    """Retry sync or async functions with exponential backoff."""
     def decorator(func):
+        is_async = asyncio.iscoroutinefunction(func)
+
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        async def async_wrapper(*args, **kwargs):
             delay = backoff_in_seconds
             for attempt in range(1, retries + 1):
                 try:
-                    return func(*args, **kwargs)
+                    return await func(*args, **kwargs) if is_async else func(*args, **kwargs)
                 except exceptions as e:
                     if attempt == retries:
-                        logger.error(f"Function {func.__name__} failed after {retries} attempts.")
+                        logger.error(f"{func.__name__} failed after {retries} retries.")
                         raise
-                    else:
-                        sleep_time = min(delay, max_backoff_in_seconds)
-                        if jitter:
-                            sleep_time = sleep_time * (0.5 + random.random() / 2)  # ±50%
-                        logger.warning(
-                            f"Attempt {attempt} failed with {e}. "
-                            f"Retrying in {sleep_time:.2f} seconds..."
-                        )
-                        time.sleep(sleep_time)
-                        delay *= 2  # Exponential backoff
-        return wrapper
+                    sleep = min(delay, max_backoff_in_seconds)
+                    if jitter:
+                        sleep *= (0.5 + random.random() / 2)
+                    logger.warning(f"{func.__name__} attempt {attempt} failed: {e}. Retrying in {sleep:.1f}s...")
+                    await asyncio.sleep(sleep) if is_async else time.sleep(sleep)
+                    delay *= 2
+
+        return async_wrapper
     return decorator
 
 
