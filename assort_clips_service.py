@@ -190,7 +190,7 @@ class AssortClipsService:
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
-                if (highlight_score >= 0.7) or (saliency_score >= 0.8 and highlight_score >= 0.6):
+                if (highlight_score >= 0.6) or (saliency_score >= 0.7 and highlight_score >= 0.5):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
@@ -201,9 +201,8 @@ class AssortClipsService:
 
             for (start_idx, end_idx) in highlight_groups:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
-                logger.info(f"[AssortClipsService] grouping from llm {groups}")
                 for group in groups:
-                    l, r = group["indexes"][0], group["indexes"][-1]
+                    l, r = start_idx + group["indexes"][0], start_idx + group["indexes"][-1]
                     highlight = {
                         "start_time": scored_clips[l]["start_time"],
                         "end_time": scored_clips[r]["end_time"],

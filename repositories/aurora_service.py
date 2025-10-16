@@ -369,7 +369,7 @@ class AuroraService:
         async with self.get_connection() as cursor:
             await cursor.execute(query, tuple(params))
             row = await cursor.fetchone()
-            logger.info("[AuroraService] - has_more_entries - {row}")
+            logger.info(f"[AuroraService] - has_more_entries - {row}")
             return True if row else False
 
     async def close(self):
