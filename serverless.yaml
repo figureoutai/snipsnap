@@ -389,14 +389,14 @@ resources:
             Compress: true
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed: CachingOptimized
           CacheBehaviors:
-            - PathPattern: "*images/frame/*"
+            - PathPattern: "streams/*images/frame/*"
               TargetOriginId: StorageS3Origin
               ViewerProtocolPolicy: redirect-to-https
               AllowedMethods: [GET, HEAD]
               CachedMethods: [GET, HEAD]
               Compress: true
               CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed
-            - PathPattern: "*audio/streams/*"
+            - PathPattern: "streams/*video/*"
               TargetOriginId: StorageS3Origin
               ViewerProtocolPolicy: redirect-to-https
               AllowedMethods: [GET, HEAD]
