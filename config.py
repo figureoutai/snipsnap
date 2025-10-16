@@ -41,3 +41,19 @@ BASE_DIR = "./data"
 
 HIGHLIGHT_CHUNK = 300
 MAX_STREAM_DURATION = 180
+
+# --- Agentic Boundary Snapping (defaults) ---
+# Max allowed edge shifts when snapping to boundaries (seconds)
+SNAP_MAX_SHIFT_SCENE_START = 1.0
+SNAP_MAX_SHIFT_SCENE_END = 2.0
+SNAP_MAX_SHIFT_TOPIC = 1.0
+
+# Enforce clip duration bounds after snapping (seconds)
+HIGHLIGHT_MIN_LEN = 4.0
+HIGHLIGHT_MAX_LEN = 12.0
+
+# TextTiling parameters (topic segmentation over ASR words)
+TEXT_TILING_BLOCK = 20
+TEXT_TILING_STEP = 10
+TEXT_TILING_SMOOTH = 2
+TEXT_TILING_CUTOFF_STD = 0.5
