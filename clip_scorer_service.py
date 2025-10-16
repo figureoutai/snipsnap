@@ -87,7 +87,7 @@ class CaptionService:
         transcript = candidate_clip.get_transcript(audio_metadata)
         logger.info(f"[CaptionService] transcript: {transcript}")
         images = [numpy_to_base64(img) for img in candidate_clip.load_images()]
-        response = await self.llm.invoke(prompt=CAPTION_AND_SCORER_PROMPT, response_type="json", query=transcript, images=images, max_tokens=500)
+        response = await self.llm.invoke(prompt=CAPTION_AND_SCORER_PROMPT, response_type="json", queries=[transcript], images=images, max_tokens=500)
         return response["highlight_score"], response["caption"]
 
 
@@ -173,7 +173,7 @@ class ClipScorerService:
         else:
             return 0, 5
     
-    async def score_clips(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
+    async def score_clips(self, stream_id, clip_scorer_event: asyncio.Event, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
         base_path = f"{BASE_DIR}/{stream_id}"
         should_break = False
         i = 0
@@ -181,6 +181,7 @@ class ClipScorerService:
         while True:
             if should_break:
                 logger.info("[ClipScorerService] exiting saliency scorer service.")
+                clip_scorer_event.set()
                 break
             start_time, end_time = self._get_slice(i)
             candidate_clip = CandidateClip(base_path, start_time, end_time)

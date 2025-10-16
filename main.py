@@ -57,6 +57,7 @@ async def main():
     stream_processor_event = threading.Event()
     video_processor_event = asyncio.Event()
     audio_processor_event = asyncio.Event()
+    clip_scorer_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
     audio_frame_q = Queue(maxsize=2048)
@@ -76,8 +77,8 @@ async def main():
         asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
         asyncio.create_task(audio_transcriber.transcribe_audio(stream_id, audio_processor_event)),
-        asyncio.create_task(clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event)),
-        asyncio.create_task(assort_clips_service.assort_clips(stream_id, audio_processor_event, video_processor_event))
+        asyncio.create_task(clip_scorer.score_clips(stream_id, clip_scorer_event, audio_processor_event, video_processor_event)),
+        asyncio.create_task(assort_clips_service.assort_clips(stream_id, clip_scorer_event))
     ]
 
     def _signal_handler(signum, frame):

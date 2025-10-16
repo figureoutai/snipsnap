@@ -5,7 +5,7 @@ from aiobotocore.session import get_session
 
 from .base_llm import LLM
 from utils.logger import app_logger as logger
-from utils.helpers import extract_json, retry_with_backoff
+from utils.helpers import extract_json, retry_with_backoff, EMPTY_STRING
 
 
 class Claude(LLM):
@@ -17,9 +17,9 @@ class Claude(LLM):
         self.session = get_session()
 
     @retry_with_backoff(retries=3, backoff_in_seconds=2)
-    async def invoke(self, prompt: str, response_type: str, query: str = "", images: List[str] = [], max_tokens: int = 300,):
+    async def invoke(self, prompt: str, response_type: str, queries: List[str] = [], images: List[str] = [], max_tokens: int = 300,):
         content = [
-            {"type": "text", "text": query},
+            *[{"type": "text", "text": query} for query in queries if query and query != EMPTY_STRING],
             *[
                 {
                     "type": "image",

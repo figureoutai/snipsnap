@@ -1,15 +1,115 @@
 import json
 import asyncio
 
+from typing import List
+from llm.claude import Claude
 from config import STREAM_METADATA_TABLE
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
 
+GROUPING_AND_TITLE_PROMPT = """
+    You are an AI assistant that groups sentences describing the same event. Follow these steps for each input:
+        1. Read all sentences carefully.
+        2. Compare each sentence to identify which sentences belong to the same event.
+        3. Think step-by-step as you decide which sentences belong together.
+        4. Assign sentences to groups.
+        5. Give each group a short descriptive title.
+        6. For each group, return only the start and the end indexes (0-based) of the sentences in that group. If there is only one sentence the start and end index will be the same. 
+        7. Return the output as a valid JSON format exactly like the example below. No need to return the reasoning.
+
+    ---
+
+    ### Few-Shot Example 1
+        Input:
+        [
+            "Violent brawl erupts between Swans and Lions fans at Brisbane's Gabba stadium.",
+            "Reporter covering post-game brawl between Swans and Lions fans at Brisbane's Gabba stadium.",
+            "Sunny day at the beach with kids playing volleyball."
+        ]
+
+        Step-by-step reasoning:
+            - Sentence 0 describes a brawl between Swans and Lions fans at a stadium.
+            - Sentence 1 describes the same brawl, just from a reporter’s perspective.
+            - Sentence 2 is unrelated, about a beach volleyball event.
+            - Therefore, sentences 0 and 1 belong to one group, and sentence 2 belongs to another group.
+
+        Output:
+        {
+            "groups": [
+                {
+                    "title": "Swans vs Lions post-game brawl",
+                    "indexes": [0, 1]
+                },
+                {
+                    "title": "Beach volleyball fun",
+                    "indexes": [2]
+                }
+            ]
+        }
+
+    ---
+
+    ### Few-Shot Example 2
+        Input:
+        [
+            "Fire breaks out in downtown apartment building, firefighters on site.",
+            "Residents evacuated from downtown apartment building due to fire.",
+            "Local football team wins championship, fans celebrate in city square."
+        ]
+
+        Step-by-step reasoning:
+            - Sentence 0 and 1 describe the same fire event in a downtown apartment.
+            - Sentence 2 is unrelated, about a football celebration.
+            - Therefore, sentences 0 and 1 belong to one group, and sentence 2 to another.
+
+        Output:
+        {
+            "groups": [
+                {
+                    "title": "Downtown apartment fire",
+                    "indexes": [0, 1]
+                },
+                {
+                    "title": "Football championship celebration",
+                    "indexes": [2, 2]
+                }
+            ]
+        }
+    ---
+    ## Output format (JSON):
+        {
+            "groups": [
+                {
+                    "title": "Downtown apartment fire",
+                    "indexes": [0, 1]
+                },
+                {
+                    "title": "Football championship celebration",
+                    "indexes": [2, 2]
+                },
+                {
+                    "title": "Goal highlights",
+                    "indexes": [3, 8]
+                }
+            ]
+        }
+    **Note**: Do not add anything extra to the output. 
+"""
+
+class GroupAndTitleService:
+    def __init__(self):
+        self.llm = Claude()
+
+    async def group_and_generate_title(self, sentences: List[str]):
+        response = await self.llm.invoke(prompt=GROUPING_AND_TITLE_PROMPT, response_type="json", queries=sentences, max_tokens=500)
+        return response["groups"]
+
 class AssortClipsService:
     def __init__(self):
         self.is_db_service_initialized = False
         self.db_service = AuroraService(pool_size=10)
+        self.title_service = GroupAndTitleService()
 
     async def intialize_db_service(self):
         if not self.is_db_service_initialized:
@@ -52,7 +152,7 @@ class AssortClipsService:
 
         return consolidated
     
-    async def assort_clips(self, stream_id, audio_processor_event: asyncio.Event, video_processor_event: asyncio.Event):
+    async def assort_clips(self, stream_id, clip_scorer_event: asyncio.Event):
         should_break = False
         i = 0
         await self.intialize_db_service()
@@ -64,7 +164,7 @@ class AssortClipsService:
             scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+300)
 
             if len(scored_clips) < 100:
-                if audio_processor_event.is_set() and video_processor_event.is_set():
+                if clip_scorer_event.is_set():
                     should_break = True
                 else:
                     logger.info("[AssortClipsService] waiting for data to become available...")
@@ -86,13 +186,18 @@ class AssortClipsService:
             highlights = []
 
             for (start_idx, end_idx) in highlight_groups:
-                highlight = {
-                    "start_time": scored_clips[start_idx]["start_time"],
-                    "end_time": scored_clips[end_idx]["end_time"],
-                    "caption": ' '.join(scored_clips[start_idx:end_idx+1]),
-                    "thumbnail": get_video_frame_filename(i),
-                }
-                highlights.append(highlight)
+                groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
+                logger.info(f"[AssortClipsService] grouping from llm {groups}")
+                for group in groups:
+                    l, r = (group["indexes"][0], group["indexes"][1]) if len(group["indexes"]) == 2 else (group["indexes"][0], group["indexes"][0])
+                    highlight = {
+                        "start_time": scored_clips[l]["start_time"],
+                        "end_time": scored_clips[r]["end_time"],
+                        "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
+                        "thumbnail": get_video_frame_filename(i),
+                        "title": group["title"]
+                    }
+                    highlights.append(highlight)
 
             logger.info(f"[AssortClipsService] generated highlights {highlights}")
 
