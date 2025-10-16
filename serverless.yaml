@@ -8,6 +8,23 @@ provider:
   stage: ${opt:stage, 'main'}
   tags:
     aws-hackathon-2025: "true"
+  # Enable CORS for API Gateway HTTP API
+  httpApi:
+    cors:
+      allowedOrigins:
+        - '*'
+        # - !Sub https://${FrontendDistribution.DomainName}
+        # - http://localhost:3000
+        # - http://localhost:5173
+        # - http://localhost:8080
+      allowedMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowCredentials: false
   vpc:
     securityGroupIds:
       - !Ref LambdaSecurityGroup
@@ -22,6 +39,10 @@ provider:
     BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
     STREAM_METADATA_TABLE: "stream_metadata"
     CDN_DOMAIN: !GetAtt FrontendDistribution.DomainName
+    # Frontend origin used by Lambdas for response headers
+    FRONTEND_ORIGIN: !Sub https://${FrontendDistribution.DomainName}
+    ALLOWED_ORIGINS: ["http://localhost:5173"]
+
   iamRoleStatements:
     - Effect: Allow
       Action:
