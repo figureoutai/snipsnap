@@ -3,7 +3,7 @@ import asyncio
 
 from typing import List
 from llm.claude import Claude
-from config import STREAM_METADATA_TABLE
+from config import STREAM_METADATA_TABLE, HIGHLIGHT_CHUNK, CANDIDATE_SLICE
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
@@ -168,9 +168,9 @@ class AssortClipsService:
                 logger.info("[AssortClipsService] exiting assort clips service.")
                 break
             
-            scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+300)
+            scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+HIGHLIGHT_CHUNK)
 
-            if len(scored_clips) < 60:
+            if len(scored_clips) < HIGHLIGHT_CHUNK//CANDIDATE_SLICE:
                 if clip_scorer_event.is_set():
                     if len(scored_clips) == 0:
                         should_break = True
@@ -220,4 +220,5 @@ class AssortClipsService:
                 where_clause="stream_id=%s",
                 where_params=(stream_id,)
             )
-            
+            i += HIGHLIGHT_CHUNK
+    
