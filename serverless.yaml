@@ -21,6 +21,7 @@ provider:
     BATCH_JOB_QUEUE: !Ref BatchJobQueue
     BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
     STREAM_METADATA_TABLE: "stream_metadata"
+    CDN_DOMAIN: !GetAtt FrontendDistribution.DomainName
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -372,6 +373,10 @@ resources:
               DomainName: !GetAtt FrontendBucket.RegionalDomainName
               S3OriginConfig: {}
               OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+            - Id: StorageS3Origin
+              DomainName: !GetAtt StorageBucket.RegionalDomainName
+              S3OriginConfig: {}
+              OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
           DefaultCacheBehavior:
             TargetOriginId: FrontendS3Origin
             ViewerProtocolPolicy: redirect-to-https
@@ -383,6 +388,21 @@ resources:
               - HEAD
             Compress: true
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed: CachingOptimized
+          CacheBehaviors:
+            - PathPattern: "*images/frame/*"
+              TargetOriginId: StorageS3Origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachedMethods: [GET, HEAD]
+              Compress: true
+              CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed
+            - PathPattern: "*audio/streams/*"
+              TargetOriginId: StorageS3Origin
+              ViewerProtocolPolicy: redirect-to-https
+              AllowedMethods: [GET, HEAD]
+              CachedMethods: [GET, HEAD]
+              Compress: true
+              CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed
           CustomErrorResponses:
             - ErrorCode: 403
               ResponsePagePath: /index.html
@@ -410,6 +430,28 @@ resources:
               Resource:
                 - !GetAtt FrontendBucket.Arn
                 - !Sub ${FrontendBucket.Arn}/*
+              Condition:
+                StringEquals:
+                  AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution.Id}
+
+    # Allow CloudFront (via OAC) to read from the Storage bucket as well
+    StorageBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref StorageBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: AllowCloudFrontReadStorage
+              Effect: Allow
+              Principal:
+                Service: cloudfront.amazonaws.com
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !GetAtt StorageBucket.Arn
+                - !Sub ${StorageBucket.Arn}/*
               Condition:
                 StringEquals:
                   AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution.Id}
@@ -564,6 +606,8 @@ resources:
               Value: !GetAtt AuroraCluster.Endpoint.Address
             - Name: DB_NAME
               Value: ${self:custom.dbName}
+            - Name: CDN_DOMAIN
+              Value: !GetAtt FrontendDistribution.DomainName
           LogConfiguration:
             LogDriver: awslogs
             Options:

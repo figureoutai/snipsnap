@@ -8,6 +8,7 @@ import aiofiles
 from pathlib import Path
 from datetime import datetime
 from utils.logger import app_logger as logger
+from config import CDN_DOMAIN
 
 
 class S3Service:
@@ -136,11 +137,16 @@ class S3Service:
                 Bucket=self.bucket_name, Key=s3_key, Body=file_data, **extra_args
             )
 
+        # Prefer CDN domain for public HTTPS if configured
+        public_https = (
+            f"https://{CDN_DOMAIN}/{s3_key}" if CDN_DOMAIN else f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}"
+        )
+
         result = {
             "key": s3_key,
             "bucket": self.bucket_name,
             "url": f"s3://{self.bucket_name}/{s3_key}",
-            "https_url": f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}",
+            "https_url": public_https,
             "etag": response.get("ETag", "").strip('"'),
             "content_type": content_type,
             "size": len(file_data),
@@ -196,11 +202,16 @@ class S3Service:
                 Bucket=self.bucket_name, Key=s3_key, Body=file_data, **extra_args
             )
 
+        # Prefer CDN domain for public HTTPS if configured
+        public_https = (
+            f"https://{CDN_DOMAIN}/{s3_key}" if CDN_DOMAIN else f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}"
+        )
+
         result = {
             "key": s3_key,
             "bucket": self.bucket_name,
             "url": f"s3://{self.bucket_name}/{s3_key}",
-            "https_url": f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}",
+            "https_url": public_https,
             "etag": response.get("ETag", "").strip('"'),
             "content_type": content_type,
             "size": len(file_data),
