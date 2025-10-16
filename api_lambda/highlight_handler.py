@@ -13,6 +13,7 @@ SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
 
 # Global pool (shared across invocations)
 db_service: AuroraService | None = None
@@ -39,10 +40,20 @@ async def get_highlights_by_stream(stream_id: str):
     logger.info("successfully connected to db")
     return await service.get_highlights_by_stream(stream_id)
 
-def _cors_headers():
+def _cors_headers(event):
+    
+    origin = None
+    if 'headers' in event:
+        headers = event['headers']
+        origin = headers.get('origin') or headers.get('Origin')
+    
+    selected_origin = FRONTEND_ORIGIN
+    if origin and (origin in ALLOWED_ORIGINS):
+        selected_origin = origin
+    
     return {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+        "Access-Control-Allow-Origin": selected_origin,
         "Access-Control-Allow-Headers": "Content-Type,Authorization",
         "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     }
@@ -59,7 +70,7 @@ def get_highlights(event, context):
 
         return  {
             "statusCode": 200,
-            "headers": _cors_headers(),
+            "headers": _cors_headers(event),
             "body": json.dumps(result),
         }
 
@@ -67,6 +78,6 @@ def get_highlights(event, context):
         logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
-            "headers": _cors_headers(),
+            "headers": _cors_headers(event),
             "body": json.dumps({"ok": False, "error": str(e)}),
         }

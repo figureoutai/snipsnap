@@ -27,14 +27,25 @@ DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
 
 print("version 2")
 
 
-def _cors_headers():
+def _cors_headers(event):
+    
+    origin = None
+    if 'headers' in event:
+        headers = event['headers']
+        origin = headers.get('origin') or headers.get('Origin')
+    
+    selected_origin = FRONTEND_ORIGIN
+    if origin and (origin in ALLOWED_ORIGINS):
+        selected_origin = origin
+    
     return {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": FRONTEND_ORIGIN,
+        "Access-Control-Allow-Origin": selected_origin,
         "Access-Control-Allow-Headers": "Content-Type,Authorization",
         "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     }
@@ -136,7 +147,7 @@ def video_receiver(event, context):
         }
         return {
             "statusCode": 200,
-            "headers": _cors_headers(),
+            "headers": _cors_headers(event),
             "body": json.dumps(resp),
         }
 
@@ -144,6 +155,6 @@ def video_receiver(event, context):
         logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
-            "headers": _cors_headers(),
+            "headers": _cors_headers(event),
             "body": json.dumps({"ok": False, "error": str(e)}),
         }
