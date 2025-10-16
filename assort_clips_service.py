@@ -221,4 +221,3 @@ class AssortClipsService:
                 where_params=(stream_id,)
             )
             i += HIGHLIGHT_CHUNK
-    
