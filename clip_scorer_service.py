@@ -3,8 +3,6 @@ import asyncio
 import librosa
 import numpy as np
 
-import os
-import json
 from typing import List
 from llm.claude import Claude
 from candidate_clip import CandidateClip
@@ -18,7 +16,7 @@ from config import (
     CANDIDATE_SLICE, 
     STEP_BACK,
     AUDIO_CHUNK,
-    SCORE_METADATA_TABLE,
+    SCORE_METADATA_TABLE
 )
 
 CAPTION_AND_SCORER_PROMPT = """
@@ -147,9 +145,6 @@ class ClipScorerService:
             logger.info("[AudioTranscriber] Initializing DB Connection")
             await self.db_service.initialize()
             self.is_db_service_initialized = True
-
-    # -------- Agentic helpers (Observe -> Plan -> Act) --------
-    # (agentic helpers removed; snapping moved to assort_clips stage)
 
     async def transcribe_leftover_audio_chunks(self, stream_id, audio_chunks):
         transcriber = AudioTranscriber(f"{BASE_DIR}/{stream_id}/audio_chunks")
