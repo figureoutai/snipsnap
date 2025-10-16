@@ -17,19 +17,8 @@ class TranscriptEventHandler(TranscriptResultStreamHandler):
     def __init__(self, stream_id, filename, output_stream):
         super().__init__(output_stream)
         self.transcript_data = []
-        self.filename = filename
-        self.stream_id = stream_id
-        self.is_db_writer_initialized = False
-        self.db_writer = AuroraService(pool_size=10)
     
-    async def intialize_db_writer(self):
-        if not self.is_db_writer_initialized:
-            logger.info("[TranscriptEventHandler] Initializing DB Connection")
-            await self.db_writer.initialize()
-            self.is_db_writer_initialized = True
-
     async def handle_transcript_event(self, transcript_event: TranscriptEvent):
-        await self.intialize_db_writer()
         results = transcript_event.transcript.results
         for result in results:
             if result.alternatives and not result.is_partial:
@@ -41,16 +30,6 @@ class TranscriptEventHandler(TranscriptResultStreamHandler):
                         "type": item.item_type,
                     }
                     self.transcript_data.append(item_data)
-        if len(self.transcript_data) == 0:
-            logger.info(f"[TranscriptEventHandler] {self.filename} no transcript was received.")
-        else:
-            await self.db_writer.update_dict(
-                    table_name=AUDIO_METADATA_TABLE_NAME,
-                    data={"transcript": json.dumps(self.transcript_data)},
-                    where_clause="stream_id=%s AND filename=%s",
-                    where_params=(self.stream_id, self.filename)
-                )
-            logger.info(f"[TranscriptEventHandler] pushed the transcript for {self.filename} to audio metadata table: {len(self.transcript_data)}")
 
 
 class AudioTranscriber:
@@ -96,14 +75,13 @@ class AudioTranscriber:
         event_handler = TranscriptEventHandler(stream_id, filename, transcription_stream.output_stream)
         await asyncio.gather(send_audio_chunks(), event_handler.handle_events())
 
-        if len(event_handler.transcript_data) == 0:
-            await self.db_service.update_dict(
-                table_name=AUDIO_METADATA_TABLE_NAME,
-                data={"transcript": json.dumps([])},
-                where_clause="stream_id=%s AND filename=%s",
-                where_params=(stream_id, filename)
-            )
-            logger.info(f"[TranscriptEventHandler] no transcript data was received pushed the empty transcript for {filename} to audio metadata table.")
+        await self.db_service.update_dict(
+            table_name=AUDIO_METADATA_TABLE_NAME,
+            data={"transcript": json.dumps(event_handler.transcript_data)},
+            where_clause="stream_id=%s AND filename=%s",
+            where_params=(stream_id, filename)
+        )
+        logger.info(f"[TranscriptEventHandler] pushed transcript for {filename} to audio metadata table.")
 
 
     async def transcribe_audio(self, stream_id, audio_processor_event: Event):

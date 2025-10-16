@@ -107,6 +107,7 @@ async def main():
         await set_stream_status(stream_id, "FAILED", str(e))
     finally:
         stream_processor_event.set()
+        await db_service.close()
         print("Shutdown complete.")
         end_time = time.time()
         logger.info(f"[Main] Total time taken by pipeline is: {end_time-start_time}s", )

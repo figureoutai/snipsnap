@@ -3,7 +3,7 @@ import asyncio
 
 from typing import List
 from llm.claude import Claude
-from config import STREAM_METADATA_TABLE
+from config import STREAM_METADATA_TABLE, HIGHLIGHT_CHUNK, CANDIDATE_SLICE
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
@@ -168,12 +168,13 @@ class AssortClipsService:
                 logger.info("[AssortClipsService] exiting assort clips service.")
                 break
             
-            scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+300)
+            scored_clips = await self.db_service.get_scored_clips_by_stream(stream_id, i, i+HIGHLIGHT_CHUNK)
 
-            if len(scored_clips) < 60:
+            if len(scored_clips) < HIGHLIGHT_CHUNK//CANDIDATE_SLICE:
                 if clip_scorer_event.is_set():
                     if len(scored_clips) == 0:
                         should_break = True
+                        continue
                     elif await self.db_service.has_more_entries_after(stream_id, scored_clips[-1]["end_time"]):
                         logger.info("[AssortClipsService] clip scorer has exited but have more clips to process, fetching them")
                         continue
@@ -189,7 +190,7 @@ class AssortClipsService:
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
-                if (highlight_score >= 0.7) or (saliency_score >= 0.8 and highlight_score >= 0.6):
+                if (highlight_score >= 0.6) or (saliency_score >= 0.7 and highlight_score >= 0.5):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
@@ -200,9 +201,8 @@ class AssortClipsService:
 
             for (start_idx, end_idx) in highlight_groups:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
-                logger.info(f"[AssortClipsService] grouping from llm {groups}")
                 for group in groups:
-                    l, r = group["indexes"][0], group["indexes"][-1]
+                    l, r = start_idx + group["indexes"][0], start_idx + group["indexes"][-1]
                     highlight = {
                         "start_time": scored_clips[l]["start_time"],
                         "end_time": scored_clips[r]["end_time"],
@@ -220,4 +220,4 @@ class AssortClipsService:
                 where_clause="stream_id=%s",
                 where_params=(stream_id,)
             )
-            
+            i += HIGHLIGHT_CHUNK
