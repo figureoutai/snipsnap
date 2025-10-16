@@ -7,6 +7,9 @@ S3_REGION = "us-east-1"
 IMAGE_BUCKET_PREFIX = "images/frame/"
 AUDIO_BUCKET_PREFIX = "audio/streams/"
 
+# Optional: CloudFront domain to serve S3 objects
+CDN_DOMAIN = os.environ.get("CDN_DOMAIN")
+
 
 DB_NAME=os.environ.get("DB_NAME", "video_processing_db")
 VIDEO_METADATA_TABLE_NAME = "video_metadata"
@@ -36,4 +39,5 @@ STEP_BACK = 2
 # LOCAL STORAGE
 BASE_DIR = "./data"
 
-MAX_STREAM_DURATION = 600
+HIGHLIGHT_CHUNK = 300
+MAX_STREAM_DURATION = 180

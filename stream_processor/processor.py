@@ -1,15 +1,14 @@
 import av
-import asyncio
 
+from queue import Queue
 from threading import Event
 from av.stream import Disposition
 from config import MAX_STREAM_DURATION
 from utils.logger import app_logger as logger
-from utils.unique_async_queue import UniqueAsyncQueue
 
 
 class StreamProcessor:
-    def __init__(self, url: str, audio_frame_q: UniqueAsyncQueue, video_frame_q: UniqueAsyncQueue):
+    def __init__(self, url: str, audio_frame_q: Queue, video_frame_q: Queue):
         if not audio_frame_q or not video_frame_q:
             raise Exception("Stream processor resquires audio and video frame queues")
         self.audio_frame_q = audio_frame_q
@@ -17,7 +16,7 @@ class StreamProcessor:
         self.stream_url = url
         self.max_seconds = MAX_STREAM_DURATION
 
-    def start_stream(self, loop, stream_processor_event: Event):
+    def start_stream(self, stream_processor_event: Event):
         logger.info(f"[Stream Proceesor] Starting to read the stream {self.stream_url}")
         try:
             with av.open(self.stream_url) as container:
@@ -48,9 +47,9 @@ class StreamProcessor:
                                     stream_processor_event.set()
                                     return
                             if packet.stream.type == "video":
-                                loop.call_soon_threadsafe(self.video_frame_q.put_nowait, frame)
+                                self.video_frame_q.put(frame)
                             elif packet.stream.type == "audio":
-                                loop.call_soon_threadsafe(self.audio_frame_q.put_nowait, frame)
+                                self.audio_frame_q.put(frame)
                     except Exception as e:
                         logger.error(f"[Stream Processor] Error decoding packet: {e}")
                         continue

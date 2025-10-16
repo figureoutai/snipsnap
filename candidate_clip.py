@@ -6,7 +6,7 @@ import numpy as np
 
 from config import VIDEO_FRAME_SAMPLE_RATE
 from utils.logger import app_logger as logger
-from utils.helpers import get_audio_filename, get_video_frame_filename
+from utils.helpers import get_audio_filename, get_video_frame_filename, EMPTY_STRING
 
 class CandidateClip:
     def __init__(self, base_path, start_time, end_time):
@@ -51,7 +51,7 @@ class CandidateClip:
     
     def load_images(self):
         images = []
-        for i in range(self.start_time, self.end_time * VIDEO_FRAME_SAMPLE_RATE):
+        for i in range(self.start_time * VIDEO_FRAME_SAMPLE_RATE,  self.start_time + (self.end_time - self.start_time) * VIDEO_FRAME_SAMPLE_RATE):
             filepath = f"{self.base_path}/frames/{get_video_frame_filename(i)}"
             if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] video frame does not exist {os.path.basename(filepath)}")
@@ -70,4 +70,4 @@ class CandidateClip:
                         continue
                     words.append(item['content'])
         
-        return ' '.join(words) 
+        return ' '.join(words) if len(words) > 0 else EMPTY_STRING

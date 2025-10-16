@@ -15,6 +15,8 @@ DB_NAME = os.environ["DB_NAME"]
 
 # Global pool (shared across invocations)
 db_service: AuroraService | None = None
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 async def init_db():
     global db_service
@@ -44,7 +46,7 @@ def get_highlights(event, context):
             raise KeyError("stream_id not found in Query Parameters.")
         stream_id = query_params["stream_id"]
 
-        result = asyncio.run(get_highlights_by_stream(stream_id))
+        result = loop.run_until_complete(get_highlights_by_stream(stream_id))
 
         return  {
             "statusCode": 200,

@@ -346,6 +346,31 @@ class AuroraService:
             await cursor.execute(query, tuple(params))
             results = await cursor.fetchall()
             return results
+        
+    async def has_more_entries_after(self, stream_id: str, end_time: float) -> bool:
+        """
+        Check if there are more score_metadata entries after the given end_time for a specific stream.
+
+        Args:
+            stream_id: The stream identifier
+            end_time: The reference end time
+
+        Returns:
+            True if more entries exist after the given end_time, False otherwise.
+        """
+        query = """
+            SELECT EXISTS(
+                SELECT 1
+                FROM score_metadata
+                WHERE stream_id = %s AND start_time > %s
+            )
+        """
+        params = [stream_id, end_time]
+
+        async with self.get_connection() as cursor:
+            await cursor.execute(query, tuple(params))
+            result = await cursor.fetchone()
+            return result[0] if result else False
 
     async def close(self):
         """Close the connection pool."""

@@ -8,6 +8,7 @@ import aiofiles
 from pathlib import Path
 from datetime import datetime
 from utils.logger import app_logger as logger
+from config import CDN_DOMAIN
 
 
 class S3Service:
@@ -20,6 +21,7 @@ class S3Service:
         region_name: str = "us-east-1",
         audio_prefix: str = "audio/",
         image_prefix: str = "images/",
+        base_prefix: str = "streams/",
     ):
         """
         Initialize the S3 service.
@@ -36,6 +38,7 @@ class S3Service:
         self.region_name = region_name
         self.audio_prefix = audio_prefix
         self.image_prefix = image_prefix
+        self.base_prefix = base_prefix
 
         # Use provided credentials or fall back to environment variables
         self.aws_access_key_id = aws_access_key_id or os.getenv("AWS_ACCESS_KEY_ID")
@@ -87,7 +90,7 @@ class S3Service:
             # filename = f"{name}_{timestamp}{ext}"
             filename = f"{name}{ext}"
 
-        return f"{stream_id}/{prefix}{filename}"
+        return f"{self.base_prefix}{stream_id}/{prefix}{filename}"
 
     async def upload_audio(
         self,
@@ -136,11 +139,16 @@ class S3Service:
                 Bucket=self.bucket_name, Key=s3_key, Body=file_data, **extra_args
             )
 
+        # Prefer CDN domain for public HTTPS if configured
+        public_https = (
+            f"https://{CDN_DOMAIN}/{s3_key}" if CDN_DOMAIN else f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}"
+        )
+
         result = {
             "key": s3_key,
             "bucket": self.bucket_name,
             "url": f"s3://{self.bucket_name}/{s3_key}",
-            "https_url": f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}",
+            "https_url": public_https,
             "etag": response.get("ETag", "").strip('"'),
             "content_type": content_type,
             "size": len(file_data),
@@ -183,6 +191,7 @@ class S3Service:
         if not filename:
             raise ValueError("filename must be provided when using file_data")
 
+        # Place frames under streams/<stream_id>/images/... so they match the CDN rule
         s3_key = self._generate_s3_key(stream_id, filename, self.image_prefix, add_timestamp)
         content_type = self._get_content_type(filename)
 
@@ -196,11 +205,16 @@ class S3Service:
                 Bucket=self.bucket_name, Key=s3_key, Body=file_data, **extra_args
             )
 
+        # Prefer CDN domain for public HTTPS if configured
+        public_https = (
+            f"https://{CDN_DOMAIN}/{s3_key}" if CDN_DOMAIN else f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}"
+        )
+
         result = {
             "key": s3_key,
             "bucket": self.bucket_name,
             "url": f"s3://{self.bucket_name}/{s3_key}",
-            "https_url": f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{s3_key}",
+            "https_url": public_https,
             "etag": response.get("ETag", "").strip('"'),
             "content_type": content_type,
             "size": len(file_data),

@@ -6,13 +6,13 @@ import signal
 import asyncio
 import threading
 
+from queue import Queue
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from clip_scorer_service import ClipScorerService
 from config import BASE_DIR, STREAM_METADATA_TABLE
 from assort_clips_service import AssortClipsService
 from repositories.aurora_service import AuroraService
-from utils.unique_async_queue import UniqueAsyncQueue
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
@@ -57,10 +57,11 @@ async def main():
     stream_processor_event = threading.Event()
     video_processor_event = asyncio.Event()
     audio_processor_event = asyncio.Event()
+    clip_scorer_event = asyncio.Event()
     loop = asyncio.get_running_loop()
 
-    audio_frame_q = UniqueAsyncQueue()
-    video_frame_q = UniqueAsyncQueue()
+    audio_frame_q = Queue(maxsize=2048)
+    video_frame_q = Queue(maxsize=2048)
     stream_processor = StreamProcessor(stream_url, audio_frame_q, video_frame_q)
     video_processor = VideoProcessor(f"{BASE_DIR}/{stream_id}/frames", video_frame_q)
     audio_processor = AudioProcessor(f"{BASE_DIR}/{stream_id}/audio_chunks", audio_frame_q)
@@ -69,15 +70,15 @@ async def main():
     assort_clips_service = AssortClipsService()
 
 
-    stream_task = threading.Thread(target=stream_processor.start_stream, args=(loop, stream_processor_event,), daemon=True)
+    stream_task = threading.Thread(target=stream_processor.start_stream, args=(stream_processor_event,), daemon=True)
     stream_task.start()
 
     tasks = [
         asyncio.create_task(video_processor.process_frames(stream_id, video_processor_event, stream_processor_event)),
         asyncio.create_task(audio_processor.process_frames(stream_id, audio_processor_event, stream_processor_event)),
         asyncio.create_task(audio_transcriber.transcribe_audio(stream_id, audio_processor_event)),
-        asyncio.create_task(clip_scorer.score_clips(stream_id, audio_processor_event, video_processor_event)),
-        asyncio.create_task(assort_clips_service.assort_clips(stream_id, audio_processor_event, video_processor_event))
+        asyncio.create_task(clip_scorer.score_clips(stream_id, clip_scorer_event, audio_processor_event, video_processor_event)),
+        asyncio.create_task(assort_clips_service.assort_clips(stream_id, clip_scorer_event))
     ]
 
     def _signal_handler(signum, frame):
