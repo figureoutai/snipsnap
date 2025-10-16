@@ -6,20 +6,20 @@ This document explains the first agentic step added to the pipeline: boundary‑
 
 - We still ingest exactly the same way: demux → frames to disk → audio chunks → ASR → score + caption.
 - We now “observe” extra signals:
-  - Scene cuts (shot boundaries) from the video.
+  - Scene cuts (shot boundaries) computed from the sampled frames (no full‑video decoding).
   - Topic boundaries from the transcript (TextTiling).
 - For each candidate 5‑second window, we “plan” and “act” by aligning (snapping) the window’s start/end to these boundaries within small limits. Then we score/caption that snapped window.
 - Guardrails ensure the window stays between 4–12 seconds, and we never cross the window midpoint when snapping a single edge. If we can’t snap, we keep the original edges.
 
-This agentic system Observes → Plan → Act and chooses boundary‑aware actions per window based on observations
+This agentic system Observes → Plans → Acts and chooses boundary‑aware actions per window based on observations.
 
 ## What’s New
 
 ### Modules
 
 - `detectors/scene_detector.py`
-  - `detect_scene_boundaries(video_path, threshold=27.0, min_scene_len_sec=1.0)`
-  - Uses PySceneDetect ContentDetector to return shot/scene cut timestamps in seconds.
+  - `detect_scene_boundaries(frames_dir, fps, threshold=0.5, min_scene_len_sec=1.0)`
+  - Computes shot/scene cuts directly from saved frames using HSV histogram distance and a minimum scene length. Returns boundary timestamps (seconds).
 
 - `nlp/text_tiling.py`
   - `text_tiling_boundaries(words, block_size=20, step=10, smoothing_width=2, cutoff_std=0.5)`
@@ -36,20 +36,22 @@ This agentic system Observes → Plan → Act and chooses boundary‑aware actio
 - Duration bounds: `HIGHLIGHT_MIN_LEN = 4.0`, `HIGHLIGHT_MAX_LEN = 12.0`
 - TextTiling: `TEXT_TILING_BLOCK = 20`, `TEXT_TILING_STEP = 10`, `TEXT_TILING_SMOOTH = 2`, `TEXT_TILING_CUTOFF_STD = 0.5`
 
-### Scoring path changes (clip_scorer_service.py)
+### Assort stage changes (assort_clips_service.py)
 
-We added a small agentic layer inside `ClipScorerService`:
+We added the agentic step at the end of the pipeline, after clips are grouped and titled into final highlights:
 
 - Caches per stream: `scene_boundaries`, `topic_boundaries`.
 - Observe
-  - Scene: computed once if a local video path is available (`VIDEO_PATH` env var). If not, scenes are skipped.
-  - Topic: computed once we have enough ASR words (≥ 2 × `TEXT_TILING_BLOCK`) by flattening `audio_metadata.transcript` items (pronunciations only) to a global word list and running TextTiling.
+  - Scene: computed once from frames in `BASE_DIR/<stream_id>/frames` at `VIDEO_FRAME_SAMPLE_RATE` (no full video dependency).
+  - Topic: computed once from `audio_metadata.transcript` by flattening items (pronunciations only) into a global word list and running TextTiling.
 - Plan
-  - For each candidate grid window `[start, end]` (current 5s, step‑back 2s), choose snapped edges using `snap_window` with priority scene > topic and constraints from config.
+  - For each final highlight span `[start_time, end_time]` (built from grouped 5s clips), choose snapped edges via `snap_window` with priority scene > topic and constraints from config.
 - Act
-  - Rebuild `CandidateClip` with snapped `[s, e]` and run saliency + caption on the snapped interval. We insert the highlight with `[s, e]` as the official bounds.
+  - Replace the highlight’s `start_time`/`end_time` with the snapped values.
+  - Update `thumbnail` to the frame index at `int(snapped_start * VIDEO_FRAME_SAMPLE_RATE)`.
+  - Keep `caption` and `title` from the grouping step (optional re‑caption can be added later).
 - Reflect
-  - If snapping would violate constraints, we back off (expand/trim/fallback) inside `snap_window`. We log which source each edge used.
+  - If snapping would violate constraints, `snap_window` expands/trim/falls back automatically. We log original vs snapped spans for observability.
 
 ## Concrete Example
 
@@ -71,7 +73,8 @@ We added a small agentic layer inside `ClipScorerService`:
 
 ## Operational Notes
 
-- Scene detection requires a local file path. Set `VIDEO_PATH` env var if available; otherwise scene snapping is skipped and topic snapping still applies.
+- Scene detection runs on saved frames. Ensure frames exist in `BASE_DIR/<stream_id>/frames`. With sparse sampling (e.g., 2 fps), set a sensible `min_scene_len_sec` and threshold.
+- Snapping is applied to final highlights (not every 5s clip), keeping compute and cost low and minimizing churn in earlier stages.
 - Topic boundaries rely on ASR transcripts stored in `audio_metadata.transcript`. Only items with `type == 'pronunciation'` and valid `start_time` are used. We map chunk‑relative times to global times via each row’s `start_timestamp`.
 - We do not alter how audio chunks or frames are stored. Snapping only changes the time bounds used when extracting frames/audio for scoring/captioning.
 - No DB schema changes in this pass. Boundary source tags are logged; adding them to `score_metadata` can be a later enhancement.
@@ -87,6 +90,5 @@ We added a small agentic layer inside `ClipScorerService`:
 
 - Persist boundaries (`stream_boundaries` table) for audit/iteration.
 - Add speech (VAD) and scene‑change confidence to boundary selection.
-- Re‑transcribe low‑confidence spans that intersect final windows.
+- Optional LLM arbitration at the assort stage (see `evaluators/snap_evaluator.py`) to choose between original vs snapped spans for close calls.
 - Adaptive peak detection (saliency prominence) to hit soft targets for the number of highlights.
-

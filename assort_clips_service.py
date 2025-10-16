@@ -3,10 +3,29 @@ import asyncio
 
 from typing import List
 from llm.claude import Claude
-from config import STREAM_METADATA_TABLE, HIGHLIGHT_CHUNK, CANDIDATE_SLICE
+from config import (
+    STREAM_METADATA_TABLE,
+    HIGHLIGHT_CHUNK,
+    CANDIDATE_SLICE,
+    VIDEO_FRAME_SAMPLE_RATE,
+    SNAP_MAX_SHIFT_SCENE_START,
+    SNAP_MAX_SHIFT_SCENE_END,
+    SNAP_MAX_SHIFT_TOPIC,
+    HIGHLIGHT_MIN_LEN,
+    HIGHLIGHT_MAX_LEN,
+    HIGHLIGHT_MAX_LEN,
+    BASE_DIR,
+    LLM_SNAP_ARBITRATE,
+    LLM_SNAP_MIN_DELTA_SEC,
+)
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
+from detectors.scene_detector import detect_scene_boundaries
+from nlp.text_tiling import text_tiling_boundaries
+from utils.boundary_snapper import snap_window
+import os
+from evaluators.snap_evaluator import SnapEvaluator
 
 GROUPING_AND_TITLE_PROMPT = """
     You are an AI assistant that groups sentences describing the same event. 
@@ -113,6 +132,10 @@ class AssortClipsService:
         self.is_db_service_initialized = False
         self.db_service = AuroraService(pool_size=10)
         self.title_service = GroupAndTitleService()
+        # Boundary caches per stream_id
+        self._scene_boundaries = {}
+        self._topic_boundaries = {}
+        self.snap_evaluator: SnapEvaluator | None = None
 
     async def intialize_db_service(self):
         if not self.is_db_service_initialized:
@@ -157,6 +180,71 @@ class AssortClipsService:
     
     async def has_more_clips(self, stream_id, end_time):
         return await self.db_service.has_more_entries_after(stream_id, end_time)
+
+    async def _flatten_transcript_words(self, stream_id: str):
+        rows = await self.db_service.get_audios_by_stream(stream_id=stream_id)
+        words = []
+        for row in rows:
+            t = row.get("transcript")
+            if not t:
+                continue
+            try:
+                items = json.loads(t)
+            except Exception:
+                continue
+            start0 = float(row.get("start_timestamp") or 0.0)
+            for it in items:
+                if it.get("type") != "pronunciation":
+                    continue
+                st = it.get("start_time")
+                if st is None:
+                    continue
+                words.append({
+                    "content": it.get("content", ""),
+                    "start_time": float(st) + start0,
+                    "type": "pronunciation",
+                })
+        return words
+
+    async def _ensure_boundaries(self, stream_id: str):
+        # Scene boundaries from frames if not cached
+        if stream_id not in self._scene_boundaries:
+            frames_dir = os.path.join(BASE_DIR, stream_id, "frames")
+            if os.path.isdir(frames_dir):
+                try:
+                    cuts = detect_scene_boundaries(frames_dir=frames_dir, fps=VIDEO_FRAME_SAMPLE_RATE)
+                except Exception as e:
+                    logger.warning(f"[AssortClipsService] Scene detection failed: {e}")
+                    cuts = []
+            else:
+                cuts = []
+            self._scene_boundaries[stream_id] = cuts
+
+        # Topic boundaries via TextTiling if not cached
+        if stream_id not in self._topic_boundaries:
+            try:
+                words = await self._flatten_transcript_words(stream_id)
+                topics = text_tiling_boundaries(words)
+            except Exception as e:
+                logger.warning(f"[AssortClipsService] TextTiling failed: {e}")
+                topics = []
+            self._topic_boundaries[stream_id] = topics
+
+    def _snap_highlight(self, stream_id: str, start: float, end: float):
+        scenes = self._scene_boundaries.get(stream_id, [])
+        topics = self._topic_boundaries.get(stream_id, [])
+        s, e, _ = snap_window(
+            start,
+            end,
+            scene_boundaries=scenes,
+            topic_boundaries=topics,
+            max_shift_scene_start=SNAP_MAX_SHIFT_SCENE_START,
+            max_shift_scene_end=SNAP_MAX_SHIFT_SCENE_END,
+            max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
+            min_len=HIGHLIGHT_MIN_LEN,
+            max_len=HIGHLIGHT_MAX_LEN,
+        )
+        return s, e
 
     
     async def assort_clips(self, stream_id, clip_scorer_event: asyncio.Event):
@@ -203,12 +291,39 @@ class AssortClipsService:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
                 for group in groups:
                     l, r = start_idx + group["indexes"][0], start_idx + group["indexes"][-1]
+                    # Agentic refinement: compute boundaries once, then snap this highlight
+                    await self._ensure_boundaries(stream_id)
+                    orig_start = scored_clips[l]["start_time"]
+                    orig_end = scored_clips[r]["end_time"]
+                    snapped_start, snapped_end = self._snap_highlight(stream_id, orig_start, orig_end)
+
+                    # LLM arbitration (optional): choose between original and snapped when shift is meaningful
+                    chosen_start, chosen_end = snapped_start, snapped_end
+                    if LLM_SNAP_ARBITRATE:
+                        delta = max(abs(snapped_start - orig_start), abs(snapped_end - orig_end))
+                        if delta >= LLM_SNAP_MIN_DELTA_SEC:
+                            if self.snap_evaluator is None:
+                                self.snap_evaluator = SnapEvaluator()
+                            try:
+                                res = await self.snap_evaluator.compare(
+                                    stream_id,
+                                    base_path=f"{BASE_DIR}/{stream_id}",
+                                    original=(orig_start, orig_end),
+                                    snapped=(snapped_start, snapped_end),
+                                )
+                                if res.get("winner") == "original":
+                                    chosen_start, chosen_end = orig_start, orig_end
+                            except Exception as e:
+                                logger.warning(f"[AssortClipsService] LLM SnapEvaluator failed: {e}")
+
+                    # Update thumbnail to chosen start frame
+                    thumb_idx = int(chosen_start * VIDEO_FRAME_SAMPLE_RATE)
                     highlight = {
-                        "start_time": scored_clips[l]["start_time"],
-                        "end_time": scored_clips[r]["end_time"],
+                        "start_time": chosen_start,
+                        "end_time": chosen_end,
                         "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
-                        "thumbnail": get_video_frame_filename(l),
-                        "title": group["title"]
+                        "thumbnail": get_video_frame_filename(thumb_idx),
+                        "title": group["title"],
                     }
                     highlights.append(highlight)
 

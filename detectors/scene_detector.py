@@ -1,81 +1,94 @@
 from __future__ import annotations
 
+import os
+import re
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
+
+import cv2
 
 from utils.logger import app_logger as logger
 
 
-def _frames_from_seconds(seconds: float, fps: float) -> int:
-    return max(1, int(round(seconds * fps)))
+_FNAME_RE = re.compile(r"frame_(\d+)\.jpg$")
+
+
+def _sorted_frame_files(frames_dir: str) -> List[Tuple[int, str]]:
+    files = []
+    try:
+        for name in os.listdir(frames_dir):
+            m = _FNAME_RE.match(name)
+            if not m:
+                continue
+            idx = int(m.group(1))
+            files.append((idx, os.path.join(frames_dir, name)))
+    except FileNotFoundError:
+        return []
+    files.sort(key=lambda x: x[0])
+    return files
+
+
+def _hist_hs(img_bgr, bins_h=32, bins_s=32, downscale: Optional[Tuple[int, int]] = (160, 90)):
+    if downscale is not None:
+        img_bgr = cv2.resize(img_bgr, downscale, interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    hist = cv2.calcHist([hsv], [0, 1], None, [bins_h, bins_s], [0, 180, 0, 256])
+    hist = cv2.normalize(hist, None).flatten()
+    return hist
 
 
 def detect_scene_boundaries(
-    video_path: str,
-    threshold: float = 27.0,
+    frames_dir: str,
+    fps: float,
+    threshold: float = 0.5,
     min_scene_len_sec: float = 1.0,
-    downscale_factor: int = 2,
+    downscale: Optional[Tuple[int, int]] = (160, 90),
 ) -> List[float]:
     """
-    Detect shot/scene boundaries using PySceneDetect's ContentDetector.
+    Detect scene/shot boundaries using saved frames instead of opening the video.
 
-    Returns a sorted list of boundary timestamps (in seconds). These are the
-    scene cut points (i.e., the start time of each scene after the first).
+    Args:
+        frames_dir: Folder containing sampled frames named like 'frame_000000123.jpg'.
+        fps: Sampling rate of frames in frames/sec (e.g., VIDEO_FRAME_SAMPLE_RATE).
+        threshold: Bhattacharyya distance threshold to declare a cut (> threshold → cut).
+        min_scene_len_sec: Minimum time between cuts to avoid over-segmentation.
+        downscale: Optional (width, height) to downscale frames for faster histograms.
 
-    Notes:
-    - Requires the `scenedetect` package at runtime.
-    - Works with local file paths. If your input is a stream, run detection on
-      a downloaded file or an exported copy.
+    Returns:
+        Sorted list of boundary timestamps (seconds), deduplicated.
     """
-    try:
-        from scenedetect import SceneManager, ContentDetector, VideoManager
-    except Exception as e:  # pragma: no cover - optional dependency
-        logger.error("PySceneDetect not available. Install `scenedetect`. Error: %s", e)
-        raise
+    pairs = _sorted_frame_files(frames_dir)
+    if len(pairs) < 2:
+        return []
 
-    video_manager = VideoManager([video_path])
-    scene_manager = SceneManager()
+    min_gap_frames = max(1, int(math.ceil(min_scene_len_sec * fps)))
 
-    # Start video manager to query fps for min_scene_len in frames.
-    video_manager.set_downscale_factor(downscale_factor)
-    try:
-        video_manager.start()
-    except Exception as e:
-        logger.error("Failed to open video for scene detection: %s", e)
-        raise
+    prev_idx, prev_path = pairs[0]
+    prev_img = cv2.imread(prev_path)
+    if prev_img is None:
+        logger.warning("[SceneDetector] unable to read first frame: %s", prev_path)
+        return []
+    prev_hist = _hist_hs(prev_img, downscale=downscale)
 
-    fps = float(video_manager.get_framerate()) if video_manager.get_framerate() else 30.0
-    min_scene_len_frames = _frames_from_seconds(min_scene_len_sec, fps)
-
-    scene_manager.add_detector(ContentDetector(threshold=threshold, min_scene_len=min_scene_len_frames))
-    scene_manager.detect_scenes(video_manager)
-
-    scene_list = scene_manager.get_scene_list()
-
-    # scene_list is a list of (start_timecode, end_timecode)
-    # Boundaries are the start of each scene after the first (skip t=0).
     boundaries: List[float] = []
-    for i, (start_tc, _end_tc) in enumerate(scene_list):
-        if i == 0:
-            continue
-        try:
-            boundaries.append(start_tc.get_seconds())
-        except Exception:
-            # Older versions expose .get_timecode() returning a string; best effort parse.
-            try:
-                h, m, s = str(start_tc).split(":")
-                boundaries.append(int(h) * 3600 + int(m) * 60 + float(s))
-            except Exception:
-                # Ignore unparsable entries but log them.
-                logger.warning("Unable to parse scene boundary timecode: %s", start_tc)
+    last_cut_idx = prev_idx
 
-    # Ensure strictly increasing order & uniqueness within 0.1s tolerance.
-    boundaries = sorted(boundaries)
-    deduped: List[float] = []
-    last: Optional[float] = None
-    for b in boundaries:
-        if last is None or abs(b - last) > 0.1:
-            deduped.append(round(b, 3))
-            last = b
-    return deduped
+    for idx, path in pairs[1:]:
+        img = cv2.imread(path)
+        if img is None:
+            continue
+        hist = _hist_hs(img, downscale=downscale)
+
+        # Bhattacharyya distance: 0 = identical, higher = more different
+        dist = cv2.compareHist(prev_hist.astype('float32'), hist.astype('float32'), cv2.HISTCMP_BHATTACHARYYA)
+
+        if dist > threshold and (idx - last_cut_idx) >= min_gap_frames:
+            # Boundary time at current frame index
+            t = idx / float(fps)
+            boundaries.append(round(t, 3))
+            last_cut_idx = idx
+
+        prev_hist = hist
+
+    return boundaries
 

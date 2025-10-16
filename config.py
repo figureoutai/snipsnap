@@ -57,3 +57,7 @@ TEXT_TILING_BLOCK = 20
 TEXT_TILING_STEP = 10
 TEXT_TILING_SMOOTH = 2
 TEXT_TILING_CUTOFF_STD = 0.5
+
+# LLM arbitration for snapped vs original highlights (assort stage)
+LLM_SNAP_ARBITRATE = True
+LLM_SNAP_MIN_DELTA_SEC = 0.6

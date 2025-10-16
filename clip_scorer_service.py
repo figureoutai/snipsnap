@@ -5,16 +5,13 @@ import numpy as np
 
 import os
 import json
-from typing import List, Dict
+from typing import List
 from llm.claude import Claude
 from candidate_clip import CandidateClip
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from repositories.aurora_service import AuroraService
 from utils.helpers import numpy_to_base64, EMPTY_STRING, ERROR_STRING
-from detectors.scene_detector import detect_scene_boundaries
-from nlp.text_tiling import text_tiling_boundaries
-from utils.boundary_snapper import snap_window
 from config import (
     VIDEO_FRAME_SAMPLE_RATE, 
     BASE_DIR, 
@@ -22,15 +19,6 @@ from config import (
     STEP_BACK,
     AUDIO_CHUNK,
     SCORE_METADATA_TABLE,
-    SNAP_MAX_SHIFT_SCENE_START,
-    SNAP_MAX_SHIFT_SCENE_END,
-    SNAP_MAX_SHIFT_TOPIC,
-    HIGHLIGHT_MIN_LEN,
-    HIGHLIGHT_MAX_LEN,
-    TEXT_TILING_BLOCK,
-    TEXT_TILING_STEP,
-    TEXT_TILING_SMOOTH,
-    TEXT_TILING_CUTOFF_STD,
 )
 
 CAPTION_AND_SCORER_PROMPT = """
@@ -153,11 +141,6 @@ class ClipScorerService:
         self.caption_service = CaptionService()
         self.is_db_service_initialized = False
         self.db_service = AuroraService(pool_size=10)
-        # Boundary caches per stream_id
-        self._scene_boundaries: Dict[str, List[float]] = {}
-        self._topic_boundaries: Dict[str, List[float]] = {}
-        # Optional: try to read a local video path from env for scene detection
-        self._video_path_env = os.environ.get("VIDEO_PATH")
 
     async def intialize_db_service(self):
         if not self.is_db_service_initialized:
@@ -166,86 +149,7 @@ class ClipScorerService:
             self.is_db_service_initialized = True
 
     # -------- Agentic helpers (Observe -> Plan -> Act) --------
-    async def _ensure_scene_boundaries(self, stream_id: str):
-        if stream_id in self._scene_boundaries:
-            return
-        video_path = self._video_path_env
-        if video_path and os.path.isfile(video_path):
-            try:
-                logger.info(f"[ClipScorerService] Detecting scene boundaries for {stream_id}...")
-                cuts = detect_scene_boundaries(video_path)
-                self._scene_boundaries[stream_id] = cuts
-                logger.info(f"[ClipScorerService] Scene boundaries: {len(cuts)} cuts detected.")
-            except Exception as e:
-                logger.warning(f"[ClipScorerService] Scene detection skipped due to error: {e}")
-                self._scene_boundaries[stream_id] = []
-        else:
-            # No local path; skip scenes (topic boundaries still useful)
-            self._scene_boundaries[stream_id] = []
-
-    async def _flatten_transcript_words(self, stream_id: str) -> List[Dict]:
-        # Pull all audio chunks seen so far for this stream (ordered)
-        rows = await self.db_service.get_audios_by_stream(stream_id=stream_id)
-        words: List[Dict] = []
-        for row in rows:
-            t = row.get("transcript")
-            if not t or t in (EMPTY_STRING, ERROR_STRING):
-                continue
-            try:
-                items = json.loads(t)
-            except Exception:
-                continue
-            start0 = float(row.get("start_timestamp") or 0.0)
-            for it in items:
-                if it.get("type") != "pronunciation":
-                    continue
-                st = it.get("start_time")
-                if st is None:
-                    continue
-                words.append({
-                    "content": it.get("content", ""),
-                    "start_time": float(st) + start0,
-                    "type": "pronunciation",
-                })
-        return words
-
-    async def _ensure_topic_boundaries(self, stream_id: str):
-        if stream_id in self._topic_boundaries:
-            return
-        words = await self._flatten_transcript_words(stream_id)
-        # Only compute if we have enough tokens for stable boundaries
-        if len(words) >= 2 * TEXT_TILING_BLOCK:
-            try:
-                b = text_tiling_boundaries(
-                    words,
-                    block_size=TEXT_TILING_BLOCK,
-                    step=TEXT_TILING_STEP,
-                    smoothing_width=TEXT_TILING_SMOOTH,
-                    cutoff_std=TEXT_TILING_CUTOFF_STD,
-                )
-                self._topic_boundaries[stream_id] = b
-                logger.info(f"[ClipScorerService] Topic boundaries: {len(b)} found.")
-            except Exception as e:
-                logger.warning(f"[ClipScorerService] TextTiling failed: {e}")
-                self._topic_boundaries[stream_id] = []
-        else:
-            self._topic_boundaries[stream_id] = []
-
-    def _snap_window(self, stream_id: str, start: float, end: float):
-        scenes = self._scene_boundaries.get(stream_id, [])
-        topics = self._topic_boundaries.get(stream_id, [])
-        s, e, tags = snap_window(
-            start,
-            end,
-            scene_boundaries=scenes,
-            topic_boundaries=topics,
-            max_shift_scene_start=SNAP_MAX_SHIFT_SCENE_START,
-            max_shift_scene_end=SNAP_MAX_SHIFT_SCENE_END,
-            max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
-            min_len=HIGHLIGHT_MIN_LEN,
-            max_len=HIGHLIGHT_MAX_LEN,
-        )
-        return s, e, tags
+    # (agentic helpers removed; snapping moved to assort_clips stage)
 
     async def transcribe_leftover_audio_chunks(self, stream_id, audio_chunks):
         transcriber = AudioTranscriber(f"{BASE_DIR}/{stream_id}/audio_chunks")
@@ -276,22 +180,13 @@ class ClipScorerService:
         should_break = False
         i = 0
         await self.intialize_db_service()
-        # Observe (once): try to compute scene boundaries if possible
-        await self._ensure_scene_boundaries(stream_id)
         while True:
             if should_break:
                 logger.info("[ClipScorerService] exiting saliency scorer service.")
                 clip_scorer_event.set()
                 break
             start_time, end_time = self._get_slice(i)
-            # Plan: ensure topic boundaries once transcripts exist
-            await self._ensure_topic_boundaries(stream_id)
-
-            # Plan: decide snapped window using boundaries & constraints
-            snapped_start, snapped_end, tags = self._snap_window(stream_id, start_time, end_time)
-            if (snapped_start, snapped_end) != (start_time, end_time):
-                logger.info(f"[ClipScorerService] Snapped window {start_time}-{end_time} -> {snapped_start}-{snapped_end} ({tags})")
-            candidate_clip = CandidateClip(base_path, snapped_start, snapped_end)
+            candidate_clip = CandidateClip(base_path, start_time, end_time)
             audio_chunk_indexes = candidate_clip.get_audio_chunk_indexes(AUDIO_CHUNK)
 
             logger.info(f"[ClipScorerService] scoring for interval {start_time} - {end_time}.")
@@ -315,15 +210,13 @@ class ClipScorerService:
                 await asyncio.sleep(0.5)
                 continue
 
-            # Ensure a baseline of frames exist near the original schedule; since we may have snapped,
-            # do a soft check for the snapped window frames as well (best-effort).
             frame_metdata = await self.db_service.get_videos_by_stream(
                 stream_id=stream_id,
-                start_frame=int(snapped_start*VIDEO_FRAME_SAMPLE_RATE),
-                limit=int(max(1, (snapped_end - snapped_start) * VIDEO_FRAME_SAMPLE_RATE))
+                start_frame=start_time*VIDEO_FRAME_SAMPLE_RATE,
+                limit=CANDIDATE_SLICE*VIDEO_FRAME_SAMPLE_RATE
             )
 
-            if (len(frame_metdata) == 0) or (len(audio_metadata) != len(audio_chunk_indexes)):
+            if (len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE) or (len(audio_metadata) != len(audio_chunk_indexes)):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
                     should_break = True
                     if not audio_metadata or not frame_metdata:
@@ -332,13 +225,12 @@ class ClipScorerService:
                     await asyncio.sleep(0.2)
                     continue
             
-            # Act: compute saliency & caption on the snapped window
             score = self.get_slice_saliency_score(candidate_clip)
             highlight_score, caption = await self.caption_service.generate_clip_caption(candidate_clip, audio_metadata)
             metadata = {
                 "stream_id": stream_id,
-                "start_time": snapped_start,
-                "end_time": snapped_end,
+                "start_time": start_time,
+                "end_time": end_time,
                 "saliency_score": score,
                 "caption": caption,
                 "highlight_score": highlight_score
