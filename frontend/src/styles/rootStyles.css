@@ -77,3 +77,11 @@ h1 {
   border-color: #3a4a7c;
   box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
 }
+
+.loader-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100%;
+    width: 100%;
+}

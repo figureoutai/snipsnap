@@ -1,4 +1,9 @@
 
+.player-container {
+  /* background: red; */
+  background: #000;
+  border-radius: 8px;
+}
 .video-el {
   width: 100%;
   max-height: 70vh;
@@ -7,13 +12,14 @@
 }
 
 .bar-wrap {
-  margin-top: 10px;
+  margin-top: 8px;
+  padding: 8px;
 }
 
 .highlight-bar {
   position: relative;
   height: 10px;
-  background: var(--bar-bg);
+  background: white;
   border-radius: 999px;
   cursor: pointer;
   overflow: hidden;
@@ -22,9 +28,12 @@
 .highlight-range {
   position: absolute;
   top: 0;
-  height: 100%;
-  background: var(--highlight);
-  opacity: 0.85;
+  height: 100%;  
+  background: #4C763B;  
+}
+
+.highlight-range.active {
+  background: #043915;
 }
 
 .highlight-bar:hover .highlight-range {
@@ -45,9 +54,9 @@
   display: flex;
   justify-content: space-between;
   color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  margin-top: 6px;
+  font-variant-numeric: tabular-nums;  
   font-size: 0.9rem;
+  padding-top: 8px;
 }
 
 .hint {
