@@ -100,7 +100,7 @@ function Dashboard() {
             // Wait a moment for user to read the message
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            // await submitVideo(searchQuery.trim());
+            await submitVideo(searchQuery.trim());
             setSearchQuery(''); // Clear input after successful submission
             await refresh(); // Refresh the streams list
         } catch (err) {
