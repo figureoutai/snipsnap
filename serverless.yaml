@@ -523,6 +523,33 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
+    MediaConvertJobRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MediaConvertJobRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - mediaconvert.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: MediaConvertS3Access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
+
     BatchTaskRole:
       Type: AWS::IAM::Role
       Properties:
@@ -566,9 +593,13 @@ resources:
                   Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}
                 - Effect: Allow
                   Action:
-                    - "mediaconvert:CreateJob"
-                    - "mediaconvert:DescribeEndpoints"
+                    - mediaconvert:CreateJob
+                    - mediaconvert:DescribeEndpoints
                   Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - iam:PassRole
+                  Resource: !GetAtt MediaConvertJobRole.Arn
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
@@ -590,33 +621,6 @@ resources:
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
-
-    MediaConvertJobRole:
-      Type: AWS::IAM::Role
-      Properties:
-        RoleName: MediaConvertJobRole
-        AssumeRolePolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service:
-                  - mediaconvert.amazonaws.com
-              Action:
-                - sts:AssumeRole
-        Policies:
-          - PolicyName: MediaConvertS3Access
-            PolicyDocument:
-              Version: "2012-10-17"
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - s3:GetObject
-                    - s3:PutObject
-                    - s3:ListBucket
-                  Resource:
-                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/
-                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
 
     BatchComputeEnvironment:
       Type: AWS::Batch::ComputeEnvironment
