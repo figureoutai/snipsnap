@@ -4,7 +4,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(10, 25, 47, 0.7); /* Darkest blue with opacity */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -13,11 +13,11 @@
 }
 
 .modal-content {
-    background: white;
+    background: #172A45; /* Medium blue */
     border-radius: 12px;
     width: 90%;
     max-width: 500px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    box-shadow: 0 20px 25px -5px rgba(10, 25, 47, 0.2), 0 10px 10px -5px rgba(10, 25, 47, 0.1);
     animation: modal-appear 0.3s ease-out;
 }
 
@@ -31,19 +31,20 @@
 }
 
 .modal-header.error {
-    background-color: #FEE2E2;
-    color: #DC2626;
+    background-color: #0A192F; /* Darkest blue */
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-header.info {
-    background-color: #E0F2FE;
-    color: #0284C7;
+    background-color: #304869; /* Lighter blue */
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-title {
     margin: 0;
     font-size: 1.25rem;
     font-weight: 600;
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-close {
@@ -59,24 +60,25 @@
     justify-content: center;
     border-radius: 50%;
     transition: background-color 0.2s;
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-close:hover {
-    background-color: rgba(0, 0, 0, 0.1);
+    background-color: rgba(230, 213, 208, 0.1); /* Light pinkish beige with low opacity */
 }
 
 .modal-body {
     padding: 24px;
     font-size: 1rem;
     line-height: 1.5;
-    color: #4B5563;
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-footer {
     padding: 16px 24px;
     display: flex;
     justify-content: flex-end;
-    border-top: 1px solid #E5E7EB;
+    border-top: 1px solid #304869; /* Lighter blue */
 }
 
 .modal-button {
@@ -89,21 +91,21 @@
 }
 
 .modal-button.error {
-    background-color: #DC2626;
-    color: white;
+    background-color: #0A192F; /* Darkest blue */
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-button.error:hover {
-    background-color: #B91C1C;
+    background-color: #172A45; /* Medium blue */
 }
 
 .modal-button.info {
-    background-color: #0284C7;
-    color: white;
+    background-color: #304869; /* Lighter blue */
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .modal-button.info:hover {
-    background-color: #0369A1;
+    background-color: #405C80; /* Even lighter blue */
 }
 
 @keyframes modal-appear {

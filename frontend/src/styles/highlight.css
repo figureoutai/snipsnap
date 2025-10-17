@@ -3,7 +3,7 @@
     flex-direction: column;    
     width: 100vw;
     height: 100vh;
-    background: #f7fafc;
+    background: #0A192F; /* Darkest blue */
 }
 
 .content-wrapper {
@@ -18,7 +18,7 @@
     display: flex;
     flex-direction: column;
     padding: 32px;
-    background: white;
+    background: #172A45; /* Medium blue */
 }
 
 .loader-container {
@@ -26,9 +26,9 @@
     justify-content: center;
     align-items: center;
     /* padding: 48px; */
-    background: white;
+    background: #172A45; /* Medium blue */
     border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 3px rgba(10, 25, 47, 0.2);
     margin: auto;
     height: 100%;
     width: 100%;
@@ -38,7 +38,7 @@
     flex: 1;
     padding: 32px;
     overflow-y: auto;
-    background: white;    
+    background: #172A45; /* Medium blue */    
 }
 
 .video-container {
@@ -57,13 +57,13 @@
 .caption-container {
     margin-top: 24px !important;
     padding: 16px 20px;
-    background: #f8fafc;
+    background: #0A192F; /* Darkest blue */
     border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    color: #334155;
+    border: 1px solid #304869; /* Lighter blue */
+    color: #E6D5D0; /* Light pinkish beige */
     font-size: 16px;
     line-height: 1.6;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 4px rgba(10, 25, 47, 0.2);
     min-height: 60px;
     display: flex;
     align-items: center;
@@ -89,22 +89,22 @@
 
 .sidebar {
     width: 400px;
-    background: white;
-    border-left: 1px solid #e2e8f0;
+    background: #172A45; /* Medium blue */
+    border-left: 1px solid #304869; /* Lighter blue */
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.05);
+    box-shadow: -4px 0 16px rgba(10, 25, 47, 0.2);
 }
 
 .sidebar-header {
     padding: 24px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #304869; /* Lighter blue */
 }
 
 .sidebar-title {
     font-size: 20px;
     font-weight: 600;
-    color: #2d3748;
+    color: #E6D5D0; /* Light pinkish beige */
 }
 
 .sidebar-list {
@@ -114,7 +114,7 @@
 }
 
 .sidebar-item {
-    background: #f7fafc;
+    background: #0A192F; /* Darkest blue */
     border-radius: 8px;
     padding: 16px;
     margin-bottom: 12px;
@@ -127,8 +127,8 @@
 }
 
 .sidebar-item:hover {
-    background: #edf2f7;
-    border-color: #667eea;
+    background: #304869; /* Lighter blue */
+    border-color: #405C80; /* Even lighter blue */
     transform: translateX(-4px);
 }
 
@@ -139,24 +139,25 @@
 .item-title {
     font-size: 16px;
     font-weight: 600;
-    color: #2d3748;
+    color: #E6D5D0; /* Light pinkish beige */
     margin-bottom: 6px;
     line-height: 1.3;
 }
 
 .item-description {
     font-size: 14px;
-    color: #718096;
+    color: rgba(230, 213, 208, 0.8); /* Light pinkish beige with opacity */
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
 
 .item-meta {
     font-size: 12px;
-    color: #a0aec0;
+    color: rgba(230, 213, 208, 0.6); /* Light pinkish beige with more opacity */
     margin-top: 8px;
 }
 
@@ -215,7 +216,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(23, 42, 69, 0.95); /* Medium blue with opacity */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -231,8 +232,8 @@
 .loader-spinner {
     width: 50px;
     height: 50px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #3498db;
+    border: 3px solid #0A192F; /* Darkest blue */
+    border-top: 3px solid #405C80; /* Lighter blue */
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin: 0 auto;
@@ -240,7 +241,7 @@
 
 .loader-text {
     margin-top: 16px;
-    color: #2d3748;
+    color: #E6D5D0; /* Light pinkish beige */
     font-size: 16px;
     font-weight: 500;
 }
@@ -279,14 +280,15 @@
     align-items: center;
     width: 100%;
     padding: 40px;
-    background: white;
+    background: #172A45; /* Medium blue */
 }
 
 .error-message {
     text-align: center;
-    color: #e53e3e;
+    color: #E6D5D0; /* Light pinkish beige */
     padding: 24px;
-    background: #fff5f5;
+    background: #0A192F; /* Darkest blue */
     border-radius: 8px;
     max-width: 600px;
+    border: 1px solid #304869; /* Lighter blue */
 }

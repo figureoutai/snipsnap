@@ -4,9 +4,9 @@
     left: 0;
     right: 0;
     height: 52px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(23, 42, 69, 0.95); /* Medium blue with opacity */
     backdrop-filter: blur(10px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(10, 25, 47, 0.2);
     z-index: 1000;
 }
 
@@ -22,11 +22,11 @@
 .app-title {
     font-size: 24px;
     font-weight: 600;
-    color: #2d3748;
+    color: #E6D5D0; /* Light pinkish beige */
     text-decoration: none;
     transition: color 0.2s ease;
 }
 
 .app-title:hover {
-    color: #4299e1;
+    color: #405C80; /* Lighter blue */
 }
