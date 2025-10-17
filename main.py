@@ -50,11 +50,12 @@ def convert_to_hls_and_store(
         role_arn: IAM Role ARN for MediaConvert.
         region: AWS region (default: us-east-1)
     """
-
+    logger.info("[HLSConversion] starting the process to convert stream to HLS...")
     s3 = boto3.client("s3", region_name=region)
     if os.path.exists(input_source):
         # It's a local file: upload it once (streaming upload)
         key = f"streams/{stream_id}/mediaconvert_inputs/{stream_id}_{os.path.basename(input_source)}"
+        logger.info("[HLSConversion] input source is a local file storing it to S3...")
         s3.upload_file(input_source, input_bucket, key)
         input_s3_url = f"s3://{input_bucket}/{key}"
     else:
@@ -108,6 +109,7 @@ def convert_to_hls_and_store(
             }
         ],
     }
+    logger.info("[HLSConversion] pushing mediaconvert job...")
 
     response = mediaconvert.create_job(
         Role=MEDIACONVERT_ROLE_ARN,
@@ -151,6 +153,7 @@ async def main():
         "output_prefix": f"streams/{stream_id}/video",
     }
     process = multiprocessing.Process(target=convert_to_hls_and_store, kwargs=job_params)
+    process.run()
 
     start_time = time.time()
     # To signal async functions for stop
