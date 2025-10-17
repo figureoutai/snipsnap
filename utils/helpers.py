@@ -150,3 +150,19 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
 
     except Exception as e:
         logger.error(f"The requested secret {secret_name} was not found")
+
+def seconds_to_hhmmss(seconds: int) -> str:
+    """
+    Convert seconds to HH:MM:SS format.
+
+    Args:
+        seconds: Number of seconds (int or float)
+
+    Returns:
+        str: Timecode string in HH:MM:SS
+    """
+    seconds = int(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"

@@ -3,10 +3,10 @@ import asyncio
 
 from typing import List
 from llm.claude import Claude
-from config import STREAM_METADATA_TABLE, HIGHLIGHT_CHUNK, CANDIDATE_SLICE
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
 from repositories.aurora_service import AuroraService
+from config import STREAM_METADATA_TABLE, HIGHLIGHT_CHUNK, CANDIDATE_SLICE, VIDEO_FRAME_SAMPLE_RATE
 
 GROUPING_AND_TITLE_PROMPT = """
     You are an AI assistant that groups sentences describing the same event. 
@@ -207,7 +207,7 @@ class AssortClipsService:
                         "start_time": scored_clips[l]["start_time"],
                         "end_time": scored_clips[r]["end_time"],
                         "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
-                        "thumbnail": get_video_frame_filename(l),
+                        "thumbnail": get_video_frame_filename(int(scored_clips[l]["start_time"])*VIDEO_FRAME_SAMPLE_RATE),
                         "title": group["title"]
                     }
                     highlights.append(highlight)
