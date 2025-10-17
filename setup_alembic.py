@@ -1,6 +1,5 @@
 import os
 import subprocess
-from sqlalchemy import create_engine
 
 
 def setup_alembic():

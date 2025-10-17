@@ -109,13 +109,14 @@ class SaliencyScorer:
 #### Post Processing (Highlights)
 
     - Group & Title contiguous 5s clips (LLM grouping)
-    - Boundary Snapping (topic-first):
-        * Topic boundaries via TextTiling on transcripts
+    - Baseline Snap (topic-first):
+        * Topic boundaries via TextTiling on transcripts (refreshed as transcripts grow)
         * Scene cuts from saved frames (HSV histogram distance)
-    - Simple Agentic Refinement (assort stage):
+    - Agentic Refinement (assort stage):
         * LLM observes transcript + edge/mid frames + nearest boundaries
         * LLM plans ONE action: keep | use_topic | use_scene | micro_adjust
-        * System executes plan deterministically and verifies guardrails
+        * System executes plan deterministically and clamps each edge to ±MAX_EDGE_SHIFT_SECONDS relative to the original grouped span
+        * Writes a short snap_reason explaining the change
     - Finalize highlights (thumbnail based on chosen start)
 
 ## Agentic Refinement (Docs)
@@ -124,11 +125,14 @@ class SaliencyScorer:
 
 ## Configuration
 
-- Snapping/duration bounds: set in `config.py`
-  - `SNAP_MAX_SHIFT_SCENE_START`, `SNAP_MAX_SHIFT_SCENE_END`, `SNAP_MAX_SHIFT_TOPIC`
-  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN`
+- Master toggle (config.py)
+  - `AGENTIC_REFINEMENT_ENABLED` — when False, post-grouping steps (snapping, boundaries, LLM) are skipped and grouped highlights are returned as-is.
+
+- Edge budget & duration sanity (config.py)
+  - `MAX_EDGE_SHIFT_SECONDS` (per-edge clamp after refinement)
+  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN` (sanity bounds)
 - TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`
-- LLM refine toggle: `LLM_SNAP_ARBITRATE = True`
+  - `AGENTIC_REFINEMENT_ENABLED = True` (master toggle for all post-grouping steps)
 
 ### How to Deploy
 Running `./deploy.sh` deploys everything, frontend, backend and infra
