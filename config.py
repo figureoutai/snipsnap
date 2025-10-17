@@ -17,7 +17,7 @@ AUDIO_METADATA_TABLE_NAME = "audio_metadata"
 SCORE_METADATA_TABLE = "score_metadata"
 STREAM_METADATA_TABLE = "stream_metadata"
 
-DB_HOST = os.environ.get("DB_URL", "highlight-clipping-service-main-auroracluster-o27b01gfhdja.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com")
+DB_HOST = os.environ.get("DB_URL", "localhost") #"highlight-clipping-service-main-auroracluster-o27b01gfhdja.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com")
 DB_PORT = 3306
 DB_SECRET_NAME = os.environ.get("SECRET_NAME", "rds!cluster-00500b97-b996-4bb1-9e88-00aef1715034")
 
@@ -40,7 +40,7 @@ STEP_BACK = 2
 BASE_DIR = "./data"
 
 HIGHLIGHT_CHUNK = 300
-MAX_STREAM_DURATION = 180
+MAX_STREAM_DURATION = 10
 
 # --- Agentic Boundary Snapping (defaults) ---
 # Max allowed edge shifts when snapping to boundaries (seconds)
@@ -61,3 +61,5 @@ TEXT_TILING_CUTOFF_STD = 0.5
 # LLM arbitration for snapped vs original highlights (assort stage)
 LLM_SNAP_ARBITRATE = True
 LLM_SNAP_MIN_DELTA_SEC = 0.6
+LLM_SNAP_MAX_ATTEMPTS = 3
+LLM_SNAP_CONFIDENCE_THRESHOLD = 0.7
