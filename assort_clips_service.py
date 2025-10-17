@@ -190,7 +190,7 @@ class AssortClipsService:
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
-                if (highlight_score >= 0.6) or (saliency_score >= 0.7 and highlight_score >= 0.5):
+                if (highlight_score >= 0.7) or (saliency_score >= 0.8 and highlight_score >= 0.6):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
