@@ -77,14 +77,9 @@ def convert_to_hls_and_store(
                             "M3u8Settings": {}
                         },
                         "VideoDescription": {
-                        "CodecSettings": {
-                            "Codec": "H_264",
-                                "H264Settings": {
-                                "MaxBitrate": 100000,
-                                "RateControlMode": "QVBR",
-                                "SceneChangeDetect": "TRANSITION_DETECTION"
+                            "CodecSettings": {
+                                "Codec": "PASSTHROUGH"
                             }
-                        }
                         },
                         "AudioDescriptions": [
                         {
