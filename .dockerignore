@@ -40,11 +40,13 @@ node_modules/
 *.png
 *.md
 *.ini
+*.yaml
+package*.json
 
 # Serverless Lambda project
 api_lambda/
 frontend/
 
 # Local datasets / media / unused assets
-# data commenting it out for test
+data
 workflow.png

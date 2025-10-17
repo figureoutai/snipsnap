@@ -34,7 +34,6 @@ async def set_stream_status(stream_id, status: str, message: str = None):
 def convert_to_hls_and_store(
     stream_id: str,
     input_source: str,
-    input_bucket: str,
     output_bucket: str,
     output_prefix: str,
     region: str = AWS_REGION
@@ -43,28 +42,19 @@ def convert_to_hls_and_store(
     Convert a local video file or stream URL to HLS and upload to S3 using AWS MediaConvert.
 
     Args:
+        stream_id: unique id of stream
         input_source: Local file path or remote URL (http/https/s3).
-        input_bucket: S3 bucket for upload if local file.
         output_bucket: S3 bucket where converted files will be stored.
         output_prefix: Folder/prefix for the output HLS files.
-        role_arn: IAM Role ARN for MediaConvert.
         region: AWS region (default: us-east-1)
     """
     logger.info("[HLSConversion] starting the process to convert stream to HLS...")
-    s3 = boto3.client("s3", region_name=region)
-    if os.path.exists(input_source):
-        # It's a local file: upload it once (streaming upload)
-        key = f"streams/{stream_id}/mediaconvert_inputs/{stream_id}_{os.path.basename(input_source)}"
-        logger.info("[HLSConversion] input source is a local file storing it to S3...")
-        s3.upload_file(input_source, input_bucket, key)
-        input_s3_url = f"s3://{input_bucket}/{key}"
+    
+    parsed = urlparse(input_source)
+    if parsed.scheme.startswith("http") or parsed.scheme == "s3":
+        input_s3_url = input_source
     else:
-        # Assume it's already a remote URL or s3 URL
-        parsed = urlparse(input_source)
-        if parsed.scheme.startswith("http") or parsed.scheme == "s3":
-            input_s3_url = input_source
-        else:
-            raise ValueError("input_source must be a local file, HTTP URL, or S3 URL")
+        raise ValueError("input_source must be HTTP URL, or S3 URL")
 
     mediaconvert_client = boto3.client("mediaconvert", region_name=region)
     endpoint = mediaconvert_client.describe_endpoints()["Endpoints"][0]["Url"]
@@ -148,7 +138,6 @@ async def main():
     job_params = {
         "stream_id": stream_id,
         "input_source": stream_url,
-        "input_bucket": S3_BUCKET_NAME,
         "output_bucket": S3_BUCKET_NAME,
         "output_prefix": f"streams/{stream_id}/video",
     }
