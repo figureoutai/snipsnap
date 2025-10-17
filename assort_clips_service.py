@@ -26,6 +26,7 @@ from nlp.text_tiling import text_tiling_boundaries
 from utils.boundary_snapper import snap_window
 import os
 from evaluators.snap_evaluator import SnapEvaluator
+from evaluators.edge_refiner import EdgeRefiner
 
 GROUPING_AND_TITLE_PROMPT = """
     You are an AI assistant that groups sentences describing the same event. 
@@ -135,7 +136,9 @@ class AssortClipsService:
         # Boundary caches per stream_id
         self._scene_boundaries = {}
         self._topic_boundaries = {}
+        self._topic_words_count = {}
         self.snap_evaluator: SnapEvaluator | None = None
+        self.edge_refiner: EdgeRefiner | None = None
 
     async def intialize_db_service(self):
         if not self.is_db_service_initialized:
@@ -206,7 +209,7 @@ class AssortClipsService:
                 })
         return words
 
-    async def _ensure_boundaries(self, stream_id: str):
+    async def _ensure_boundaries(self, stream_id: str, clip_scorer_event: asyncio.Event | None = None):
         # Scene boundaries from frames if not cached
         if stream_id not in self._scene_boundaries:
             frames_dir = os.path.join(BASE_DIR, stream_id, "frames")
@@ -220,20 +223,37 @@ class AssortClipsService:
                 cuts = []
             self._scene_boundaries[stream_id] = cuts
 
-        # Topic boundaries via TextTiling if not cached
-        if stream_id not in self._topic_boundaries:
+        # Topic boundaries via TextTiling, with lightweight refresh when new transcript arrives
+        refresh_threshold = 100  # recompute when we have 100 new words
+        need_recompute = stream_id not in self._topic_boundaries
+        try:
+            words = await self._flatten_transcript_words(stream_id)
+            current_count = len(words)
+        except Exception as e:
+            logger.warning(f"[AssortClipsService] Failed to read words for TextTiling: {e}")
+            words = []
+            current_count = 0
+
+        last_count = self._topic_words_count.get(stream_id, 0)
+        if not need_recompute:
+            if clip_scorer_event is not None and clip_scorer_event.is_set():
+                need_recompute = True
+            elif current_count - last_count >= refresh_threshold:
+                need_recompute = True
+
+        if need_recompute:
             try:
-                words = await self._flatten_transcript_words(stream_id)
                 topics = text_tiling_boundaries(words)
             except Exception as e:
                 logger.warning(f"[AssortClipsService] TextTiling failed: {e}")
                 topics = []
             self._topic_boundaries[stream_id] = topics
+            self._topic_words_count[stream_id] = current_count
 
     def _snap_highlight(self, stream_id: str, start: float, end: float):
         scenes = self._scene_boundaries.get(stream_id, [])
         topics = self._topic_boundaries.get(stream_id, [])
-        s, e, _ = snap_window(
+        s, e, tags = snap_window(
             start,
             end,
             scene_boundaries=scenes,
@@ -243,8 +263,9 @@ class AssortClipsService:
             max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
             min_len=HIGHLIGHT_MIN_LEN,
             max_len=HIGHLIGHT_MAX_LEN,
+            priority="topic_first",
         )
-        return s, e
+        return s, e, tags
 
     
     async def assort_clips(self, stream_id, clip_scorer_event: asyncio.Event):
@@ -292,29 +313,80 @@ class AssortClipsService:
                 for group in groups:
                     l, r = start_idx + group["indexes"][0], start_idx + group["indexes"][-1]
                     # Agentic refinement: compute boundaries once, then snap this highlight
-                    await self._ensure_boundaries(stream_id)
+                    await self._ensure_boundaries(stream_id, clip_scorer_event)
                     orig_start = scored_clips[l]["start_time"]
                     orig_end = scored_clips[r]["end_time"]
-                    snapped_start, snapped_end = self._snap_highlight(stream_id, orig_start, orig_end)
+                    snapped_start, snapped_end, snap_tags = self._snap_highlight(stream_id, orig_start, orig_end)
 
-                    # LLM arbitration (optional): choose between original and snapped when shift is meaningful
+                    # LLM agentic refinement (simple plan -> act -> verify)
                     chosen_start, chosen_end = snapped_start, snapped_end
+                    snap_reason = None
                     if LLM_SNAP_ARBITRATE:
-                        delta = max(abs(snapped_start - orig_start), abs(snapped_end - orig_end))
-                        if delta >= LLM_SNAP_MIN_DELTA_SEC:
-                            if self.snap_evaluator is None:
-                                self.snap_evaluator = SnapEvaluator()
-                            try:
-                                res = await self.snap_evaluator.compare(
-                                    stream_id,
-                                    base_path=f"{BASE_DIR}/{stream_id}",
-                                    original=(orig_start, orig_end),
-                                    snapped=(snapped_start, snapped_end),
+                        if self.edge_refiner is None:
+                            self.edge_refiner = EdgeRefiner()
+                        try:
+                            plan = await self.edge_refiner.refine(
+                                stream_id,
+                                base_path=f"{BASE_DIR}/{stream_id}",
+                                snapped_start=snapped_start,
+                                snapped_end=snapped_end,
+                                topic_boundaries=self._topic_boundaries.get(stream_id, []),
+                                scene_boundaries=self._scene_boundaries.get(stream_id, []),
+                                min_len=HIGHLIGHT_MIN_LEN,
+                                max_len=HIGHLIGHT_MAX_LEN,
+                            )
+                            action = plan.get("action", "keep")
+                            sd = float(plan.get("start_delta", 0.0))
+                            ed = float(plan.get("end_delta", 0.0))
+                            reason_txt = str(plan.get("reason", ""))
+
+                            # Execute the plan deterministically
+                            if action == "use_topic":
+                                chosen_start, chosen_end, _ = self._snap_highlight(stream_id, orig_start, orig_end)
+                            elif action == "use_scene":
+                                # Force scene-first by swapping priority for this call
+                                scenes = self._scene_boundaries.get(stream_id, [])
+                                topics = self._topic_boundaries.get(stream_id, [])
+                                from utils.boundary_snapper import snap_window
+                                chosen_start, chosen_end, _ = snap_window(
+                                    orig_start,
+                                    orig_end,
+                                    scene_boundaries=scenes,
+                                    topic_boundaries=topics,
+                                    max_shift_scene_start=SNAP_MAX_SHIFT_SCENE_START,
+                                    max_shift_scene_end=SNAP_MAX_SHIFT_SCENE_END,
+                                    max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
+                                    min_len=HIGHLIGHT_MIN_LEN,
+                                    max_len=HIGHLIGHT_MAX_LEN,
+                                    priority="scene_first",
                                 )
-                                if res.get("winner") == "original":
-                                    chosen_start, chosen_end = orig_start, orig_end
-                            except Exception as e:
-                                logger.warning(f"[AssortClipsService] LLM SnapEvaluator failed: {e}")
+                            elif action == "micro_adjust":
+                                # Apply small deltas to the snapped baseline with guardrails
+                                mid = (snapped_start + snapped_end) / 2.0
+                                new_start = snapped_start + sd
+                                new_end = snapped_end + ed
+                                # midpoint safety
+                                if new_start > mid:
+                                    new_start = snapped_start
+                                if new_end < mid:
+                                    new_end = snapped_end
+                                # duration guardrails
+                                if (new_end - new_start) < HIGHLIGHT_MIN_LEN or (new_end - new_start) > HIGHLIGHT_MAX_LEN:
+                                    new_start, new_end = snapped_start, snapped_end
+                                chosen_start, chosen_end = new_start, new_end
+                            else:
+                                # keep
+                                chosen_start, chosen_end = snapped_start, snapped_end
+
+                            snap_reason = f"LLM plan={action}; applied deltas start {chosen_start-snapped_start:+.2f}s, end {chosen_end-snapped_end:+.2f}s; {reason_txt}"
+                        except Exception as e:
+                            logger.warning(f"[AssortClipsService] LLM EdgeRefiner failed: {e}")
+                    if snap_reason is None and (snapped_start != orig_start or snapped_end != orig_end):
+                        snap_reason = (
+                            f"Snapped to {snap_tags.get('start_source','original')}/"
+                            f"{snap_tags.get('end_source','original')} boundaries; "
+                            f"shifts: start {snapped_start-orig_start:+.2f}s, end {snapped_end-orig_end:+.2f}s"
+                        )
 
                     # Update thumbnail to chosen start frame
                     thumb_idx = int(chosen_start * VIDEO_FRAME_SAMPLE_RATE)
@@ -324,6 +396,7 @@ class AssortClipsService:
                         "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
                         "thumbnail": get_video_frame_filename(thumb_idx),
                         "title": group["title"],
+                        "snap_reason": snap_reason,
                     }
                     highlights.append(highlight)
 

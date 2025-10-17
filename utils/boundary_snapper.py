@@ -52,6 +52,7 @@ def snap_window(
     max_shift_topic: float = 1.0,
     min_len: float = 4.0,
     max_len: float = 12.0,
+    priority: str = "scene_first",
 ) -> Tuple[float, float, Dict[str, str]]:
     """
     Snap [start, end] to nearest boundaries with priority: scene > topic.
@@ -71,26 +72,44 @@ def snap_window(
     s_src = "original"
     e_src = "original"
 
-    # Try snapping start then end, with priority to scene cuts.
-    s_candidate = _nearest(start, scene_boundaries, max_shift_scene_start, forbid_cross=mid, prefer_direction="past")
-    if s_candidate is None:
+    # Try snapping start then end, with configurable priority.
+    if priority == "topic_first":
         s_candidate = _nearest(start, topic_boundaries, max_shift_topic, forbid_cross=mid, prefer_direction="past")
-        if s_candidate is not None:
+        if s_candidate is None:
+            s_candidate = _nearest(start, scene_boundaries, max_shift_scene_start, forbid_cross=mid, prefer_direction="past")
+            if s_candidate is not None:
+                s_src = "scene"
+        else:
             s_src = "topic"
     else:
-        s_src = "scene"
+        s_candidate = _nearest(start, scene_boundaries, max_shift_scene_start, forbid_cross=mid, prefer_direction="past")
+        if s_candidate is None:
+            s_candidate = _nearest(start, topic_boundaries, max_shift_topic, forbid_cross=mid, prefer_direction="past")
+            if s_candidate is not None:
+                s_src = "topic"
+        else:
+            s_src = "scene"
 
     if s_candidate is not None:
         start = s_candidate
 
     # End edge snapping
-    e_candidate = _nearest(end, scene_boundaries, max_shift_scene_end, forbid_cross=mid, prefer_direction="future")
-    if e_candidate is None:
+    if priority == "topic_first":
         e_candidate = _nearest(end, topic_boundaries, max_shift_topic, forbid_cross=mid, prefer_direction="future")
-        if e_candidate is not None:
+        if e_candidate is None:
+            e_candidate = _nearest(end, scene_boundaries, max_shift_scene_end, forbid_cross=mid, prefer_direction="future")
+            if e_candidate is not None:
+                e_src = "scene"
+        else:
             e_src = "topic"
     else:
-        e_src = "scene"
+        e_candidate = _nearest(end, scene_boundaries, max_shift_scene_end, forbid_cross=mid, prefer_direction="future")
+        if e_candidate is None:
+            e_candidate = _nearest(end, topic_boundaries, max_shift_topic, forbid_cross=mid, prefer_direction="future")
+            if e_candidate is not None:
+                e_src = "topic"
+        else:
+            e_src = "scene"
 
     if e_candidate is not None:
         end = e_candidate
@@ -124,4 +143,3 @@ def snap_window(
         end -= trim_e
 
     return round(start, 3), round(end, 3), {"start_source": s_src, "end_source": e_src}
-

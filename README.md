@@ -7,6 +7,16 @@
 
 > `[Stream Processor] Ending the stream, exiting.` After this log press Ctrl+C to stop the program.
 
+## Running (Batch)
+
+- The entrypoint reads a JSON job from the `JOB_MESSAGE` environment variable.
+- Example:
+
+```
+export JOB_MESSAGE='{"stream_url": "https://example.com/video.mp4", "stream_id": "demo-123"}'
+uv run main
+```
+
 ## Work Flow
 
 ![Work Flow](./workflow.png)
@@ -96,14 +106,31 @@ class SaliencyScorer:
     - Mark peaks where score > threshold (e.g., 90th percentile).
     - Merge overlapping/adjacent peaks to form continuous highlight intervals.
 
-#### Post Processing:
+#### Post Processing (Highlights)
 
-    - Speech Alignment
-    - Context Addition
-    - Scene Alignment using pyscenedetect
-    - Ranking and Output
+    - Group & Title contiguous 5s clips (LLM grouping)
+    - Boundary Snapping (topic-first):
+        * Topic boundaries via TextTiling on transcripts
+        * Scene cuts from saved frames (HSV histogram distance)
+    - Simple Agentic Refinement (assort stage):
+        * LLM observes transcript + edge/mid frames + nearest boundaries
+        * LLM plans ONE action: keep | use_topic | use_scene | micro_adjust
+        * System executes plan deterministically and verifies guardrails
+    - Finalize highlights (thumbnail based on chosen start)
 
-### Deploy
+## Agentic Refinement (Docs)
+
+- See `agentic.md` for the full description of the Observe → Plan (LLM) → Act → Verify loop and a Mermaid diagram of the end-to-end flow.
+
+## Configuration
+
+- Snapping/duration bounds: set in `config.py`
+  - `SNAP_MAX_SHIFT_SCENE_START`, `SNAP_MAX_SHIFT_SCENE_END`, `SNAP_MAX_SHIFT_TOPIC`
+  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN`
+- TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`
+- LLM refine toggle: `LLM_SNAP_ARBITRATE = True`
+
+### How to Deploy
 Running `./deploy.sh` deploys everything, frontend, backend and infra
 deploy.sh
 - --frontend: build Vite app, upload to S3, invalidate CloudFront.
