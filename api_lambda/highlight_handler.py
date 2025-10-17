@@ -33,6 +33,15 @@ async def init_db():
         await db_service.initialize()
     return db_service
 
+async def get_list_of_streams(page: int = 1, limit: int = 20, status: str = None):
+    logger.info("connecting to db")
+    service = await init_db()
+    logger.info("successfully connected to db")
+    return await service.get_available_streams(
+        page=page,
+        limit=limit,
+        status=status
+    )
 
 async def get_highlights_by_stream(stream_id: str):
     logger.info("connecting to db")
@@ -58,6 +67,34 @@ def _cors_headers(event):
         "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     }
 
+def get_streams(event, context):
+    try:
+        # Get query parameters with defaults
+        query_params = event.get('queryStringParameters', {}) or {}
+        page = int(query_params.get('page', 1))
+        limit = int(query_params.get('limit', 20))
+        status = query_params.get('status')
+
+        # Get streams with pagination
+        result = loop.run_until_complete(get_list_of_streams(
+            page=page,
+            limit=limit,
+            status=status
+        ))
+
+        return {
+            "statusCode": 200,
+            "headers": _cors_headers(event),
+            "body": json.dumps(result),
+        }
+
+    except Exception as e:
+        logger.exception("get_streams failed: %s", e)
+        return {
+            "statusCode": 500,
+            "headers": _cors_headers(event),
+            "body": json.dumps({"ok": False, "error": str(e)}),
+        }
 
 def get_highlights(event, context):
     try:
