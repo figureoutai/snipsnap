@@ -5,5 +5,14 @@ export function constructThumbnailURL(streamId, fileName = 'frame_000000000.jpg'
 }
 
 export function constructVideoURL(streamId, videoName) {
-    return `${ASSET_BASE_URL}${streamId}/video/${videoName}`;
+
+    let fileName;
+    const lastDotIndex = videoName.lastIndexOf('.');
+    if(lastDotIndex === -1){
+        fileName = videoName;
+    }else{
+        fileName = videoName.substring(0, lastDotIndex);
+    }
+
+    return `${ASSET_BASE_URL}${streamId}/video/${fileName}.m3u8`;
 }

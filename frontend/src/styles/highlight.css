@@ -1,13 +1,44 @@
 .highlights-container {
     display: flex;
+    flex-direction: column;    
+    width: 100vw;
     height: 100vh;
-    padding-top: 52px;
+    background: #f7fafc;
+}
+
+.content-wrapper {
+    display: flex;
+    flex: 1;
+    margin-top: 52px;
+    max-height: calc(100vh - 52px);
+}
+
+.main-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 32px;
+    background: white;
+}
+
+.loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* padding: 48px; */
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin: auto;
+    height: 100%;
+    width: 100%;
 }
 
 .main-content {
     flex: 1;
     padding: 32px;
     overflow-y: auto;
+    background: white;    
 }
 
 .video-container {
@@ -21,6 +52,25 @@
     justify-content: center;
     position: relative;
     aspect-ratio: 16 / 9;
+}
+
+.caption-container {
+    margin-top: 24px !important;
+    padding: 16px 20px;
+    background: #f8fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    color: #334155;
+    font-size: 16px;
+    line-height: 1.6;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+}
+
+.caption-container:empty {
+    display: none;
 }
 
 .video-placeholder {
@@ -98,6 +148,10 @@
     font-size: 14px;
     color: #718096;
     line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .item-meta {
@@ -156,7 +210,7 @@
 
 /* Loader styles */
 .loader-overlay {
-    position: fixed;
+    position: relative;
     top: 0;
     left: 0;
     right: 0;
@@ -166,6 +220,8 @@
     justify-content: center;
     align-items: center;
     z-index: 9999;
+    width: 100%;
+    height: 100%;
 }
 
 .loader-content {
@@ -215,4 +271,22 @@
     .video-container {
         max-height: 400px;
     }
+}
+
+.error-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    padding: 40px;
+    background: white;
+}
+
+.error-message {
+    text-align: center;
+    color: #e53e3e;
+    padding: 24px;
+    background: #fff5f5;
+    border-radius: 8px;
+    max-width: 600px;
 }

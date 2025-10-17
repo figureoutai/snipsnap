@@ -1,23 +1,126 @@
 import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import Hls from 'hls.js';
 import { toSeconds, formatTime } from '../utils/time.js';
 import "../styles/videoPlayer.css";
 
-const VideoPlayer = forwardRef(({ src, ranges = [] }, ref) => {
+const VideoPlayer = forwardRef(({ src, ranges = [], onSegmentChange }, ref) => {
   const videoRef = useRef(null);
   const barRef = useRef(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState(-1);
 
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !src) {
+      console.log('Video element or source not available:', { v: !!v, src });
+      return;
+    }
 
-    const onLoaded = () => setDuration(Number.isFinite(v.duration) ? v.duration : 0);
-    const onTime = () => setCurrentTime(v.currentTime || 0);
+    console.log('Initializing video player with source:', src);
 
+    const onLoaded = () => {
+      console.log('Video metadata loaded, duration:', v.duration);
+      setDuration(Number.isFinite(v.duration) ? v.duration : 0);
+    };
+    
+    const onTime = () => {
+      const time = v.currentTime || 0;
+      setCurrentTime(time);
+      
+      // Check if current time is within any segment
+      const activeIndex = normalized.findIndex(
+        segment => time >= segment.start && time <= segment.end
+      );
+      
+      // Call onSegmentChange when the active segment changes
+      if (activeIndex !== activeSegmentIndex) {
+        setActiveSegmentIndex(activeIndex);
+        if (onSegmentChange) {
+          onSegmentChange(activeIndex);
+        }
+      }
+    };
+
+    // Add error event listener
+    const onError = (e) => {
+      console.error('Video error:', v.error);
+      console.error('Error event:', e);
+    };
+
+    v.addEventListener('error', onError);
     v.addEventListener('loadedmetadata', onLoaded);
     v.addEventListener('durationchange', onLoaded);
     v.addEventListener('timeupdate', onTime);
+
+    let hls = null;
+
+    // Check if the source is an HLS stream
+    if (src.endsWith('.m3u8')) {
+      console.log('HLS stream detected');
+      
+      if (Hls.isSupported()) {
+        console.log('HLS.js is supported by this browser');
+        
+        hls = new Hls({
+          debug: true,  // Enable debug logs
+          maxLoadingDelay: 4,
+          maxBufferLength: 30,
+          liveDurationInfinity: true
+        });
+        
+        // Add HLS specific error handlers
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS error:', { event, data });
+          if (data.fatal) {
+            console.error('Fatal HLS error:', data.type);
+          }
+        });
+
+        hls.on(Hls.Events.MANIFEST_LOADING, () => {
+          console.log('HLS: Manifest loading...');
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          console.log('HLS: Manifest parsed, found ' + data.levels.length + ' quality level(s)');
+          if (v.paused) {
+            console.log('Attempting to play video...');
+            v.play()
+              .then(() => console.log('Playback started'))
+              .catch(error => console.error('Playback failed:', error));
+          }
+        });
+
+        console.log('Loading HLS source:', src);
+        hls.loadSource(src);
+        hls.attachMedia(v);
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('Network error, trying to recover...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('Media error, trying to recover...');
+                hls.recoverMediaError();
+                break;
+              default:
+                console.error('Fatal error:', data);
+                hls.destroy();
+                break;
+            }
+          }
+        });
+      } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+        // For Safari which has built-in HLS support
+        v.src = src;
+      }
+    } else {
+      // Regular video source
+      v.src = src;
+    }
 
     // In case metadata is already available
     if (v.readyState >= 1) onLoaded();
@@ -26,6 +129,16 @@ const VideoPlayer = forwardRef(({ src, ranges = [] }, ref) => {
       v.removeEventListener('loadedmetadata', onLoaded);
       v.removeEventListener('durationchange', onLoaded);
       v.removeEventListener('timeupdate', onTime);
+      v.removeEventListener('error', onError);
+      
+      if (hls) {
+        console.log('Destroying HLS instance');
+        hls.destroy();
+      }
+      
+      // Clear the video source
+      v.src = '';
+      v.load(); // Force release of media resources
     };
   }, [src]);
 
@@ -102,7 +215,6 @@ const VideoPlayer = forwardRef(({ src, ranges = [] }, ref) => {
       <video
         ref={videoRef}
         className="video-el"
-        src={src}
         controls
         playsInline
       />
@@ -112,7 +224,7 @@ const VideoPlayer = forwardRef(({ src, ranges = [] }, ref) => {
           {segments.map((s, i) => (
             <div
               key={i}
-              className="highlight-range"
+              className={`highlight-range ${i === activeSegmentIndex ? 'active' : ''}`}
               style={{ left: `${s.left}%`, width: `${s.width}%` }}
               title="Highlight"
             />
