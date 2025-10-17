@@ -60,6 +60,7 @@ flowchart TD
   Q --> R["Clamp edges to ±MAX_EDGE_SHIFT_SECONDS"]
   R --> S["Verify (bounds/midpoint)"]
   S --> T["Write highlights JSON to stream_metadata"]
+```
 
 ## Config Knobs (config.py)
 
