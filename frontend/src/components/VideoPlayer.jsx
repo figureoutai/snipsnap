@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { toSeconds, formatTime } from '../utils/time.js';
 import "../styles/videoPlayer.css";
 
-export default function VideoPlayer({ src, ranges = [] }) {
+const VideoPlayer = forwardRef(({ src, ranges = [] }, ref) => {
   const videoRef = useRef(null);
   const barRef = useRef(null);
   const [duration, setDuration] = useState(0);
@@ -61,6 +61,42 @@ export default function VideoPlayer({ src, ranges = [] }) {
     videoRef.current.currentTime = t;
   };
 
+  // Function to seek to timestamp and play
+  const seekAndPlay = (start, end) => {
+    if (!videoRef.current) return;
+    
+    const startTime = toSeconds(start);
+    const endTime = toSeconds(end);
+    
+    // Seek to start time
+    videoRef.current.currentTime = startTime;
+    
+    // Play the video
+    videoRef.current.play();
+    
+    // Set up listener to pause at end time
+    const checkTime = () => {
+      if (videoRef.current.currentTime >= endTime) {
+        videoRef.current.pause();
+        videoRef.current.removeEventListener('timeupdate', checkTime);
+      }
+    };
+    
+    videoRef.current.addEventListener('timeupdate', checkTime);
+    
+    // Cleanup listener if component unmounts or new seek is called
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.removeEventListener('timeupdate', checkTime);
+      }
+    };
+  };
+
+  // Expose seekAndPlay method to parent components
+  useImperativeHandle(ref, () => ({
+    seekAndPlay
+  }), []);
+
   return (
     <div className="player-container">
       <video
@@ -90,5 +126,6 @@ export default function VideoPlayer({ src, ranges = [] }) {
       </div>
     </div>
   );
-}
+});
 
+export default VideoPlayer;

@@ -1,68 +1,60 @@
-import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useCallback, useRef } from "react";
 import VideoPlayer from "../../components/VideoPlayer";
+import Loader from "../../components/Loader";
 import "../../styles/highlight.css";
+import useFetchHighlights from "../../hooks/useFetchHighlights";
+import { constructThumbnailURL, constructVideoURL } from "../../utils/assetURL";
+import { formatTime } from "../../utils/time";
 
 
-const mockHighlights = [
-  { start: '0:05', end: '0:08' },
-  { start: '1:10', end: '1:25' },
-];
-
-const mockSourceVideo = '../../../public/media/sample.mp4';
 
 function Highlights() {
-    const params = useParams();
 
-    const [streamId, setStreamId] = useState(null);
-    const [sourceVideo, setSourceVideo] = useState(mockSourceVideo);
-    const [highlightTimestamps, setHighlightTimestamps] = useState(mockHighlights);
+    const {data, loading, error} = useFetchHighlights();
+    const videoPlayerRef = useRef(null);
 
-
-    useEffect(() => {
-        if(params.streamId){
-            setStreamId(params.streamId);
-        }
-    }, [params]);
-
-
-    useEffect(() => {
-        /**
-         * TODO: Make fetch API call with stream Id to get the following data from backend:
-         * 1. cloudfront video source URL
-         * 2. highlights timestamps
-         * 
-         * Once the data is retrieved update the state using setSourceVideo an setHighlightTimestamps
-         */
-    }, [streamId]);
-
+       
     const handleHighlightClick = useCallback((item) => {
-        console.log('ITEM ', item);
-        /**
-         * TODO: Use the streamID and the timestamps to download the highlight video from the backend
-         */
-    }, [streamId]);
+        if (videoPlayerRef.current) {
+            videoPlayerRef.current.seekAndPlay(item.start_time, item.end_time);
+        }
+    }, []);
+
+    if (data === null || loading) {
+        return <Loader />;
+    }
 
     return (
-        <div class="highlights-container">
-            <div class="main-content">                
-                <div class="video-container">
-                    <VideoPlayer src={sourceVideo} ranges={highlightTimestamps}/>
+        <div className="highlights-container">
+            <div className="main-content">
+                <div className="video-container">
+                    <VideoPlayer 
+                        ref={videoPlayerRef}
+                        src={constructVideoURL(data.streamId, data.streamURL.split("/").splice(-1))}
+                        ranges={data.highlightsTimestamps.map((item) => {
+                            return {start: item.start_time, end: item.end_time};
+                        })} 
+                    />
                 </div>
             </div>
 
-            <div class="sidebar">
-                <div class="sidebar-header">
-                    <h2 class="sidebar-title">Highlights</h2>
+            <div className="sidebar">
+                <div className="sidebar-header">
+                    <h2 className="sidebar-title">Highlights</h2>
                 </div>
-                <div class="sidebar-list">
-                    {highlightTimestamps.map((item, index) => {
+                <div className="sidebar-list">
+                    {data.highlightsTimestamps.map((item, index) => {
 
                         return (
-                            <div class="sidebar-item" key={index} onClick={() => handleHighlightClick(item)}>
-                                <div class="item-title">{`Highlight ${index + 1}`}</div>
-                                {/* <div class="item-description">Learn the basics of HTML, CSS, and JavaScript</div> */}
-                                <div class="item-meta">{`Start: ${item.start} End: ${item.end}`}</div>
+                            <div className="sidebar-item" key={index} onClick={() => handleHighlightClick(item)}>
+                                <div className="sidebar-item-thumbnail">
+                                    <img src={constructThumbnailURL(item.thumbnail)} alt={`Highlight ${index + 1}`} style={{ width: '120px', height: '68px', objectFit: 'cover', borderRadius: '4px' }} />
+                                </div>
+                                <div className="sidebar-item-content">
+                                    <div className="item-title">{item.title}</div>
+                                    <div className="item-description">{item.caption}</div>
+                                    <div className="item-meta">{`Start: ${formatTime(item.start_time)} End: ${formatTime(item.end_time)}`}</div>
+                                </div>
                             </div>
                         );
                     })}
