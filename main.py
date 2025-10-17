@@ -2,20 +2,24 @@ import os
 import time
 import uuid
 import json
+import boto3
 import signal
 import asyncio
 import threading
+import multiprocessing
 
 from queue import Queue
+from urllib.parse import urlparse
 from utils.logger import app_logger as logger
 from audio_transcriber import AudioTranscriber
 from clip_scorer_service import ClipScorerService
-from config import BASE_DIR, STREAM_METADATA_TABLE
 from assort_clips_service import AssortClipsService
 from repositories.aurora_service import AuroraService
 from stream_processor.processor import StreamProcessor
 from stream_processor.video_processor import VideoProcessor
 from stream_processor.audio_processor import AudioProcessor
+from config import BASE_DIR, STREAM_METADATA_TABLE, MEDIACONVERT_ROLE_ARN, AWS_REGION, S3_BUCKET_NAME
+
 
 db_service = AuroraService()
 
@@ -26,6 +30,93 @@ async def set_stream_status(stream_id, status: str, message: str = None):
         where_clause="stream_id=%s", 
         where_params=(stream_id,)
     )
+
+def convert_to_hls_and_store(
+    stream_id: str,
+    input_source: str,
+    input_bucket: str,
+    output_bucket: str,
+    output_prefix: str,
+    region: str = AWS_REGION
+):
+    """
+    Convert a local video file or stream URL to HLS and upload to S3 using AWS MediaConvert.
+
+    Args:
+        input_source: Local file path or remote URL (http/https/s3).
+        input_bucket: S3 bucket for upload if local file.
+        output_bucket: S3 bucket where converted files will be stored.
+        output_prefix: Folder/prefix for the output HLS files.
+        role_arn: IAM Role ARN for MediaConvert.
+        region: AWS region (default: us-east-1)
+    """
+
+    s3 = boto3.client("s3", region_name=region)
+    if os.path.exists(input_source):
+        # It's a local file: upload it once (streaming upload)
+        key = f"streams/{stream_id}/mediaconvert_inputs/{stream_id}_{os.path.basename(input_source)}"
+        s3.upload_file(input_source, input_bucket, key)
+        input_s3_url = f"s3://{input_bucket}/{key}"
+    else:
+        # Assume it's already a remote URL or s3 URL
+        parsed = urlparse(input_source)
+        if parsed.scheme.startswith("http") or parsed.scheme == "s3":
+            input_s3_url = input_source
+        else:
+            raise ValueError("input_source must be a local file, HTTP URL, or S3 URL")
+
+    mediaconvert_client = boto3.client("mediaconvert", region_name=region)
+    endpoint = mediaconvert_client.describe_endpoints()["Endpoints"][0]["Url"]
+    mediaconvert = boto3.client("mediaconvert", endpoint_url=endpoint, region_name=region)
+
+    destination = f"s3://{output_bucket}/{output_prefix}/"
+
+    job_settings = {
+        "Inputs": [
+            {
+                "FileInput": input_s3_url,
+                "AudioSelectors": {"Audio Selector 1": {"DefaultSelection": "DEFAULT"}},
+                "VideoSelector": {},
+            }
+        ],
+        "OutputGroups": [
+            {
+                "Name": "Apple HLS",
+                "OutputGroupSettings": {
+                    "Type": "HLS_GROUP_SETTINGS",
+                    "HlsGroupSettings": {
+                        "SegmentLength": 6,
+                        "Destination": destination,
+                        "ManifestDurationFormat": "INTEGER",
+                        "DirectoryStructure": "SINGLE_DIRECTORY",
+                        "ManifestCompression": "NONE",
+                        "MinSegmentLength": 0,
+                        "SegmentControl": "SEGMENTED_FILES",
+                        "OutputSelection": "MANIFESTS_AND_SEGMENTS",
+                    },
+                },
+                "Outputs": [
+                    {
+                        "NameModifier": stream_id,
+                        "ContainerSettings": {"Container": "M3U8"},
+                        "VideoDescription": {"CodecSettings": {"Codec": "H_264"}},
+                        "AudioDescriptions": [
+                            {"CodecSettings": {"Codec": "AAC"}}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    response = mediaconvert.create_job(
+        Role=MEDIACONVERT_ROLE_ARN,
+        Settings=job_settings
+    )
+
+    logger.info(f"✅ MediaConvert job started: {response["Job"]["Id"]}, for input {input_s3_url} and output will be stored in {destination}..")
+
+
 
 async def main():
     logger.info("[Main] trying to read the message from environment....")
@@ -51,6 +142,15 @@ async def main():
     stream_url = parsed_msg["stream_url"] if parsed_msg["stream_url"] else "./data/test_videos/news.mp4"
 
     await set_stream_status(stream_id, "IN_PROGRESS")
+
+    job_params = {
+        "stream_id": stream_id,
+        "input_source": stream_url,
+        "input_bucket": S3_BUCKET_NAME,
+        "output_bucket": S3_BUCKET_NAME,
+        "output_prefix": f"streams/{stream_id}/video",
+    }
+    process = multiprocessing.Process(target=convert_to_hls_and_store, kwargs=job_params)
 
     start_time = time.time()
     # To signal async functions for stop
@@ -100,6 +200,7 @@ async def main():
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
         await set_stream_status(stream_id, "COMPLETED")
+        process.join()
     except Exception as e:
         await set_stream_status(stream_id, "FAILED", str(e))
     finally:

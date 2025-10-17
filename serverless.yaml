@@ -12,7 +12,7 @@ provider:
   httpApi:
     cors:
       allowedOrigins:
-        - '*'
+        - "*"
         # - !Sub https://${FrontendDistribution.DomainName}
         # - http://localhost:3000
         # - http://localhost:5173
@@ -556,6 +556,11 @@ resources:
                   Action:
                     - s3:ListBucket
                   Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}
+                - Effect: Allow
+                  Action:
+                    - "mediaconvert:CreateJob"
+                    - "mediaconvert:DescribeEndpoints"
+                  Resource: "*"
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
@@ -577,6 +582,33 @@ resources:
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
+
+    MediaConvertJobRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MediaConvertJobRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - mediaconvert.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: MediaConvertS3Access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
 
     BatchComputeEnvironment:
       Type: AWS::Batch::ComputeEnvironment
@@ -629,6 +661,8 @@ resources:
               Value: ${self:custom.dbName}
             - Name: CDN_DOMAIN
               Value: !GetAtt FrontendDistribution.DomainName
+            - Name: MEDIACONVERT_ROLE_ARN
+              Value: !GetAtt MediaConvertJobRole.Arn
           LogConfiguration:
             LogDriver: awslogs
             Options:

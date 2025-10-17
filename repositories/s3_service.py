@@ -1,16 +1,15 @@
 import io
-from PIL import Image
-import aioboto3
-import asyncio
 import os
-from typing import Optional, Dict, Any
-from pathlib import Path
-import mimetypes
+import asyncio
 import aiofiles
+import aioboto3
+import mimetypes
+
+from PIL import Image
 from pathlib import Path
-from datetime import datetime
-from utils.logger import app_logger as logger
 from config import CDN_DOMAIN
+from typing import Optional, Dict, Any
+from utils.logger import app_logger as logger
 
 
 class S3Service:
