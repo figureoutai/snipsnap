@@ -1,11 +1,11 @@
 import { useCallback, useRef } from "react";
 import VideoPlayer from "../../components/VideoPlayer";
 import Loader from "../../components/Loader";
-import "../../styles/highlight.css";
+import Header from "../../components/Header";
 import useFetchHighlights from "../../hooks/useFetchHighlights";
 import { constructThumbnailURL, constructVideoURL } from "../../utils/assetURL";
 import { formatTime } from "../../utils/time";
-
+import "../../styles/highlight.css";
 
 
 function Highlights() {
@@ -21,11 +21,12 @@ function Highlights() {
     }, []);
 
     if (data === null || loading) {
-        return <Loader />;
+        return <Loader message="Loading highlights..."/>;
     }
 
     return (
         <div className="highlights-container">
+            <Header />
             <div className="main-content">
                 <div className="video-container">
                     <VideoPlayer 

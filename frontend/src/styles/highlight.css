@@ -1,6 +1,7 @@
 .highlights-container {
     display: flex;
     height: 100vh;
+    padding-top: 52px;
 }
 
 .main-content {

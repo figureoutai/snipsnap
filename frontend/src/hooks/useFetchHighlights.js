@@ -26,12 +26,12 @@ export default function useFetchHighlights() {
             });
 
             const data = await response.json();
-            // console.log("DATA", data);
+            
             setData({
                 streamId: data['stream_id'],
                 streamURL: data['stream_url'],
                 status: data['status'],
-                highlightsTimestamps: JSON.parse(data['highlights'])
+                highlightsTimestamps: data['highlights'] ? JSON.parse(data['highlights']) : []
             });
         } catch (error) {
             console.error('Error fetching stream data:', error);
