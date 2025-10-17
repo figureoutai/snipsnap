@@ -78,6 +78,14 @@ functions:
       - httpApi:
           method: GET
           path: /highlights
+  streamReceiver:
+    handler: api_lambda/highlight_handler.get_streams
+    memorySize: 128
+    timeout: 29
+    events:
+      - httpApi:
+          method: GET
+          path: /streams
 
 package:
   patterns:
