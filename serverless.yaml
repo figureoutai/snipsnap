@@ -8,6 +8,23 @@ provider:
   stage: ${opt:stage, 'main'}
   tags:
     aws-hackathon-2025: "true"
+  # Enable CORS for API Gateway HTTP API
+  httpApi:
+    cors:
+      allowedOrigins:
+        - "*"
+        # - !Sub https://${FrontendDistribution.DomainName}
+        # - http://localhost:3000
+        # - http://localhost:5173
+        # - http://localhost:8080
+      allowedMethods:
+        - GET
+        - POST
+        - OPTIONS
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowCredentials: false
   vpc:
     securityGroupIds:
       - !Ref LambdaSecurityGroup
@@ -22,6 +39,10 @@ provider:
     BATCH_JOB_DEFINITION: !Ref BatchJobDefinition
     STREAM_METADATA_TABLE: "stream_metadata"
     CDN_DOMAIN: !GetAtt FrontendDistribution.DomainName
+    # Frontend origin used by Lambdas for response headers
+    FRONTEND_ORIGIN: !Sub https://${FrontendDistribution.DomainName}
+    ALLOWED_ORIGINS: ["http://localhost:5173"]
+
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -57,6 +78,14 @@ functions:
       - httpApi:
           method: GET
           path: /highlights
+  streamReceiver:
+    handler: api_lambda/highlight_handler.get_streams
+    memorySize: 128
+    timeout: 29
+    events:
+      - httpApi:
+          method: GET
+          path: /streams
 
 package:
   patterns:
@@ -494,6 +523,33 @@ resources:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
 
+    MediaConvertJobRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: MediaConvertJobRole
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - mediaconvert.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Policies:
+          - PolicyName: MediaConvertS3Access
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - s3:GetObject
+                    - s3:PutObject
+                    - s3:ListBucket
+                  Resource:
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/
+                    - !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}/*
+
     BatchTaskRole:
       Type: AWS::IAM::Role
       Properties:
@@ -535,6 +591,15 @@ resources:
                   Action:
                     - s3:ListBucket
                   Resource: !Sub arn:aws:s3:::${self:service}-${self:custom.stage}-${AWS::AccountId}
+                - Effect: Allow
+                  Action:
+                    - mediaconvert:CreateJob
+                    - mediaconvert:DescribeEndpoints
+                  Resource: "*"
+                - Effect: Allow
+                  Action:
+                    - iam:PassRole
+                  Resource: !GetAtt MediaConvertJobRole.Arn
         Tags:
           - Key: ${self:custom.tagKey}
             Value: ${self:custom.tagValue}
@@ -608,6 +673,8 @@ resources:
               Value: ${self:custom.dbName}
             - Name: CDN_DOMAIN
               Value: !GetAtt FrontendDistribution.DomainName
+            - Name: MEDIACONVERT_ROLE_ARN
+              Value: !GetAtt MediaConvertJobRole.Arn
           LogConfiguration:
             LogDriver: awslogs
             Options:

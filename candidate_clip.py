@@ -51,9 +51,7 @@ class CandidateClip:
     
     def load_images(self):
         images = []
-        start_idx = int(self.start_time * VIDEO_FRAME_SAMPLE_RATE)
-        end_idx = int(self.end_time * VIDEO_FRAME_SAMPLE_RATE)
-        for i in range(start_idx, end_idx):
+        for i in range(self.start_time * VIDEO_FRAME_SAMPLE_RATE,  self.end_time * VIDEO_FRAME_SAMPLE_RATE):
             filepath = f"{self.base_path}/frames/{get_video_frame_filename(i)}"
             if not os.path.exists(filepath):
                 logger.warning(f"[SaliencyScorerService] video frame does not exist {os.path.basename(filepath)}")

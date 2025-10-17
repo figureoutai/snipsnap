@@ -193,6 +193,19 @@ class AuroraService:
         )
         task.add_done_callback(self._handle_task_result)
 
+    async def get_stream(self, stream_id: str):
+        query = """
+            SELECT *
+            FROM stream_metadata
+            WHERE stream_id = %s
+            LIMIT 1
+        """
+
+        async with self.get_connection() as cursor:
+            await cursor.execute(query, (stream_id))
+            result = await cursor.fetchone()
+            return result
+
     async def get_video_by_stream_and_frame(
         self, stream_id: str, frame_index: int
     ) -> Optional[Dict[str, Any]]:

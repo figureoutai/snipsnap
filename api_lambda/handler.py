@@ -1,11 +1,12 @@
-import asyncio
-import json
-import logging
 import os
+import json
 import time
 import uuid
-
 import boto3
+import asyncio
+import logging
+import requests
+
 
 from .aurora_service import AuroraService
 
@@ -26,8 +27,64 @@ SECRET_NAME = os.environ["SECRET_NAME"]
 DB_URL = os.environ["DB_URL"]
 DB_NAME = os.environ["DB_NAME"]
 STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
+FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
 
 print("version 2")
+
+VIDEO_CONTENT_TYPES = {
+    "video/mp4",
+    "video/x-flv",
+    "application/vnd.apple.mpegurl",
+    "application/x-mpegurl",
+    "video/MP2T",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/x-matroska",
+    "video/webm",
+}
+
+def is_video_url(url: str, timeout: int = 8) -> bool:
+    """
+    Check if the given URL is accessible and serves actual video content.
+    """
+    try:
+        # Use HEAD first — lighter request
+        response = requests.head(url, allow_redirects=True, timeout=timeout)
+        content_type = response.headers.get("Content-Type", "").lower()
+
+        # If no content-type or it's generic, fallback to GET (some servers block HEAD)
+        if not content_type or "text/html" in content_type:
+            response = requests.get(url, stream=True, allow_redirects=True, timeout=timeout)
+            content_type = response.headers.get("Content-Type", "").lower()
+
+        # ✅ Confirm it's accessible and serves video content
+        if response.status_code == 200 and any(ct in content_type for ct in VIDEO_CONTENT_TYPES):
+            return True
+
+        return False
+
+    except requests.RequestException:
+        return False
+
+
+def _cors_headers(event):
+    
+    origin = None
+    if 'headers' in event:
+        headers = event['headers']
+        origin = headers.get('origin') or headers.get('Origin')
+    
+    selected_origin = FRONTEND_ORIGIN
+    if origin and (origin in ALLOWED_ORIGINS):
+        selected_origin = origin
+    
+    return {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": selected_origin,
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    }
 
 def get_secret(secret_name: str, region_name: str = "us-east-1"):
     # Create a Secrets Manager client
@@ -85,6 +142,9 @@ def video_receiver(event, context):
 
         if not stream_url:
             raise KeyError("stream_url is required to start the pipeline.")
+        
+        if not is_video_url(stream_url):
+            raise ValueError("stream_url is not reachable or the content is not in supported video formats")
 
         logger.info("Received stream url: %s", stream_url)
 
@@ -126,7 +186,7 @@ def video_receiver(event, context):
         }
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(event),
             "body": json.dumps(resp),
         }
 
@@ -134,6 +194,6 @@ def video_receiver(event, context):
         logger.exception("video_receiver failed: %s", e)
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": _cors_headers(event),
             "body": json.dumps({"ok": False, "error": str(e)}),
         }

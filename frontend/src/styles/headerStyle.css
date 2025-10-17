@@ -1,0 +1,32 @@
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    background: rgba(23, 42, 69, 0.95); /* Medium blue with opacity */
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 8px rgba(10, 25, 47, 0.2);
+    z-index: 1000;
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.app-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #E6D5D0; /* Light pinkish beige */
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.app-title:hover {
+    color: #405C80; /* Lighter blue */
+}

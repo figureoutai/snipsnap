@@ -1,14 +1,15 @@
-import aioboto3
-import asyncio
+import io
 import os
-from typing import Optional, Dict, Any
-from pathlib import Path
-import mimetypes
+import asyncio
 import aiofiles
+import aioboto3
+import mimetypes
+
+from PIL import Image
 from pathlib import Path
-from datetime import datetime
-from utils.logger import app_logger as logger
 from config import CDN_DOMAIN
+from typing import Optional, Dict, Any
+from utils.logger import app_logger as logger
 
 
 class S3Service:
@@ -156,12 +157,24 @@ class S3Service:
 
         logger.info(f"Uploaded audio: {s3_key}")
         return result
-
+    
+    def _get_image_byte_array(self, img, ext):
+        img_byte_arr = io.BytesIO()
+        
+        format = 'jpeg'
+        if(ext.lower() == 'png'):
+            format = 'png'
+            
+        img.save(img_byte_arr, format=format)
+    
+        formatted_image_bytes = img_byte_arr.getvalue()        
+        return formatted_image_bytes
+    
     async def upload_image(
         self,
         stream_id,
-        file_path: Optional[str] = None,
-        file_data: Optional[bytes] = None,
+        image_path: Optional[str] = None,
+        image_file: Image = None,
         filename: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
         add_timestamp: bool = True,
@@ -181,16 +194,17 @@ class S3Service:
         Returns:
             Dictionary with upload details (key, url, etag)
         """
-        if file_path:
-            filename = filename or os.path.basename(file_path)
-            async with aiofiles.open(file_path, "rb") as f:
-                file_data = await f.read()
-        elif file_data is None:
+        if image_path:
+            filename = filename or os.path.basename(image_path)
+            image_file = Image.open(image_path)
+        elif image_file is None:
             raise ValueError("Either file_path or file_data must be provided")
 
         if not filename:
             raise ValueError("filename must be provided when using file_data")
-
+        
+        image_byte_array = self._get_image_byte_array(image_file, filename.split('.')[-1])
+        
         # Place frames under streams/<stream_id>/images/... so they match the CDN rule
         s3_key = self._generate_s3_key(stream_id, filename, self.image_prefix, add_timestamp)
         content_type = self._get_content_type(filename)
@@ -202,7 +216,7 @@ class S3Service:
 
         async with self.session.client("s3") as s3:
             response = await s3.put_object(
-                Bucket=self.bucket_name, Key=s3_key, Body=file_data, **extra_args
+                Bucket=self.bucket_name, Key=s3_key, Body=image_byte_array, **extra_args
             )
 
         # Prefer CDN domain for public HTTPS if configured
@@ -217,7 +231,7 @@ class S3Service:
             "https_url": public_https,
             "etag": response.get("ETag", "").strip('"'),
             "content_type": content_type,
-            "size": len(file_data),
+            "size": len(image_byte_array),
         }
 
         logger.info(f"Uploaded image: {s3_key}")
@@ -257,8 +271,8 @@ class S3Service:
     def upload_image_nowait(
         self,
         stream_id: str,
-        file_path: Optional[str] = None,
-        file_data: Optional[bytes] = None,
+        image_path: Optional[str] = None,
+        image_file: Image = None,
         filename: Optional[str] = None,
         metadata: Optional[Dict[str, str]] = None,
         add_timestamp: bool = True,
@@ -270,7 +284,7 @@ class S3Service:
             asyncio.Task that can be awaited later if needed
         """
         task = asyncio.create_task(
-            self.upload_image(stream_id, file_path, file_data, filename, metadata, add_timestamp)
+            self.upload_image(stream_id, image_path, image_file, filename, metadata, add_timestamp)
         )
         self.pending_uploads.add(task)
         task.add_done_callback(lambda t: self.pending_uploads.discard(t))

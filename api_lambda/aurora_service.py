@@ -200,6 +200,91 @@ class AuroraService:
         )
         task.add_done_callback(self._handle_task_result)
 
+    async def get_available_streams(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        status: Optional[str] = None,
+        sort_by: str = "stream_id",
+        sort_order: str = "DESC"
+    ) -> Dict[str, Any]:
+        """
+        Retrieve available streams with pagination support.
+
+        Args:
+            page: Page number (1-based indexing)
+            limit: Number of items per page
+            status: Optional filter by status
+            sort_by: Column to sort by (default: stream_id)
+            sort_order: Sort direction (ASC or DESC)
+
+        Returns:
+            Dictionary containing:
+            - items: List of stream records
+            - total: Total number of records
+            - page: Current page number
+            - total_pages: Total number of pages
+            - has_next: Boolean indicating if there's a next page
+            - has_prev: Boolean indicating if there's a previous page
+        """
+        # Validate and sanitize input
+        allowed_sort_columns = {"stream_id", "status"}
+        if sort_by not in allowed_sort_columns:
+            sort_by = "stream_id"
+        
+        sort_order = "DESC" if sort_order.upper() != "ASC" else "ASC"
+        
+        # Calculate offset
+        offset = (max(1, page) - 1) * limit
+
+        # Base query
+        query = """
+            SELECT 
+                stream_id,
+                stream_url,
+                highlights,
+                status,
+                message
+            FROM stream_metadata
+        """
+        count_query = "SELECT COUNT(*) as total FROM stream_metadata"
+        
+        # Add status filter if provided
+        where_clause = ""
+        params = []
+        if status:
+            where_clause = " WHERE status = %s"
+            params.append(status)
+            
+        query += where_clause
+        count_query += where_clause
+
+        # Add sorting and pagination
+        query += f" ORDER BY {sort_by} {sort_order} LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        async with self.get_connection() as cursor:
+            # Get total count
+            await cursor.execute(count_query, params[:-2] if status else [])
+            total = (await cursor.fetchone())["total"]
+            
+            # Get paginated results
+            await cursor.execute(query, params)
+            items = await cursor.fetchall()
+            
+            # Calculate pagination info
+            total_pages = -((-total) // limit)  # Ceiling division
+            
+            return {
+                "items": items,
+                "total": total,
+                "page": page,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+                "limit": limit
+            }
+        
     async def get_highlights_by_stream(self, stream_id: str):
         query = """
             SELECT stream_id, stream_url, highlights, status, message

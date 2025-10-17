@@ -4,8 +4,9 @@ import json
 import time
 import boto3
 import base64
-import asyncio
 import random
+import asyncio
+import requests
 import functools
 import numpy as np
 
@@ -13,6 +14,18 @@ from .logger import app_logger as logger
 
 EMPTY_STRING = "!EMPTY!"
 ERROR_STRING = "!ERROR!"
+
+VIDEO_CONTENT_TYPES = {
+    "video/mp4",
+    "video/x-flv",
+    "application/vnd.apple.mpegurl",
+    "application/x-mpegurl",
+    "video/MP2T",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/x-matroska",
+    "video/webm",
+}
 
 def get_audio_filename(idx: int):
     return f"audio_{idx:06d}.wav"
@@ -150,3 +163,43 @@ def get_secret(secret_name: str, region_name: str = "us-east-1"):
 
     except Exception as e:
         logger.error(f"The requested secret {secret_name} was not found")
+
+def seconds_to_hhmmss(seconds: int) -> str:
+    """
+    Convert seconds to HH:MM:SS format.
+
+    Args:
+        seconds: Number of seconds (int or float)
+
+    Returns:
+        str: Timecode string in HH:MM:SS
+    """
+    seconds = int(seconds)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def is_video_url(url: str, timeout: int = 8) -> bool:
+    """
+    Check if the given URL is accessible and serves actual video content.
+    """
+    try:
+        # Use HEAD first — lighter request
+        response = requests.head(url, allow_redirects=True, timeout=timeout)
+        content_type = response.headers.get("Content-Type", "").lower()
+
+        # If no content-type or it's generic, fallback to GET (some servers block HEAD)
+        if not content_type or "text/html" in content_type:
+            response = requests.get(url, stream=True, allow_redirects=True, timeout=timeout)
+            content_type = response.headers.get("Content-Type", "").lower()
+
+        # ✅ Confirm it's accessible and serves video content
+        if response.status_code == 200 and any(ct in content_type for ct in VIDEO_CONTENT_TYPES):
+            return True
+
+        return False
+
+    except requests.RequestException:
+        return False

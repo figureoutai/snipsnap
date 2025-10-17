@@ -40,7 +40,6 @@ STEP_BACK = 2
 BASE_DIR = "./data"
 
 HIGHLIGHT_CHUNK = 300
-MAX_STREAM_DURATION = 10
 
 # --- Agentic Boundary / Duration (defaults) ---
 # Enforce clip duration sanity after refinement (seconds)
@@ -61,3 +60,6 @@ MAX_EDGE_SHIFT_SECONDS = 60.0
 # When False: after grouping, we skip boundary snapping, topic/scene detection,
 # and LLM refinement, and return grouped highlights as-is.
 AGENTIC_REFINEMENT_ENABLED = True
+MAX_STREAM_DURATION = 300
+
+MEDIACONVERT_ROLE_ARN = os.environ.get("MEDIACONVERT_ROLE_ARN")

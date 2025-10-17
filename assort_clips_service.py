@@ -1,8 +1,17 @@
+import os
 import json
 import asyncio
 
 from typing import List
 from llm.claude import Claude
+from utils.logger import app_logger as logger
+from utils.boundary_snapper import snap_window
+from evaluators.edge_refiner import EdgeRefiner
+from utils.helpers import get_video_frame_filename
+from nlp.text_tiling import text_tiling_boundaries
+from evaluators.snap_evaluator import SnapEvaluator
+from repositories.aurora_service import AuroraService
+from detectors.scene_detector import detect_scene_boundaries
 from config import (
     STREAM_METADATA_TABLE,
     HIGHLIGHT_CHUNK,
@@ -14,15 +23,7 @@ from config import (
     MAX_EDGE_SHIFT_SECONDS,
     AGENTIC_REFINEMENT_ENABLED,
 )
-from utils.logger import app_logger as logger
-from utils.helpers import get_video_frame_filename
-from repositories.aurora_service import AuroraService
-from detectors.scene_detector import detect_scene_boundaries
-from nlp.text_tiling import text_tiling_boundaries
-from utils.boundary_snapper import snap_window
-import os
-from evaluators.snap_evaluator import SnapEvaluator
-from evaluators.edge_refiner import EdgeRefiner
+
 
 GROUPING_AND_TITLE_PROMPT = """
     You are an AI assistant that groups sentences describing the same event. 
@@ -31,7 +32,11 @@ GROUPING_AND_TITLE_PROMPT = """
         2. Compare adjacent sentences and decide whether each pair belongs to the same event.
         3. Merge contiguous sentences into a group when they describe the same event.
         4. Each group must be contiguous (consecutive indexes).
-        5. Give each group a short descriptive title (3-6 words is ideal).
+        5. Give each group a short descriptive title (3-6 words is ideal). Do not give generic titles, give something that signifies the highlight. 
+            For examples:- 
+                1. Messi scored goal
+                2. Car crash
+                3. New product unveiled
         6. Return only a valid JSON object with a top-level key "groups" whose value is a list of groups. Each group is an object with "title" and "indexes" (0-based list of integers).
         7. Do not output any reasoning, explanations, or extra text — only the JSON.
         8. If a sentence is unique (not contiguous with same-event neighbors), it becomes a single-item group.
@@ -292,6 +297,7 @@ class AssortClipsService:
         i = 0
         await self.intialize_db_service()
         while True:
+            stream = await self.db_service.get_stream(stream_id)
             if should_break:
                 logger.info("[AssortClipsService] exiting assort clips service.")
                 break
@@ -318,14 +324,16 @@ class AssortClipsService:
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
-                if (highlight_score >= 0.6) or (saliency_score >= 0.7 and highlight_score >= 0.5):
+                logger.info(f"[AssortClipsService] saliency: {saliency_score} and highlight score {highlight_score} for clip {clip["start_time"]} - {clip["end_time"]}")
+                if (highlight_score >= 0.7) or (saliency_score >= 0.7 and highlight_score >= 0.6):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
 
             highlight_groups = self.consolidate_groups(self.get_one_groups(potential_highlights))
 
-            highlights = []
+            highlights = stream["highlights"] if "highlights" in stream else []
+            highlights = [] if not highlights else json.loads(highlights)
 
             for (start_idx, end_idx) in highlight_groups:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
@@ -442,5 +450,4 @@ class AssortClipsService:
                 where_clause="stream_id=%s",
                 where_params=(stream_id,)
             )
-            i += HIGHLIGHT_CHUNK
-    
+            i += HIGHLIGHT_CHUNK 
