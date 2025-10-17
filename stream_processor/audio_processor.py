@@ -34,12 +34,12 @@ class AudioChunker:
 
         self.db_writer = AuroraService(pool_size=10)
 
-        self.s3_writer = S3Service(
-            bucket_name=S3_BUCKET_NAME,
-            region_name=S3_REGION,
-            audio_prefix=AUDIO_BUCKET_PREFIX,
-            image_prefix=IMAGE_BUCKET_PREFIX,
-        )
+        # self.s3_writer = S3Service(
+        #     bucket_name=S3_BUCKET_NAME,
+        #     region_name=S3_REGION,
+        #     audio_prefix=AUDIO_BUCKET_PREFIX,
+        #     image_prefix=IMAGE_BUCKET_PREFIX,
+        # )
 
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -103,7 +103,7 @@ class AudioChunker:
             }
                         
             # upload audio clip to S3 bucket
-            self.s3_writer.upload_audio_nowait(stream_id, file_path=filepath)
+            # self.s3_writer.upload_audio_nowait(stream_id, file_path=filepath)
 
             # store metadata into Aurora SQL DB
             await self.db_writer.insert_dict(AUDIO_METADATA_TABLE_NAME, metadata)

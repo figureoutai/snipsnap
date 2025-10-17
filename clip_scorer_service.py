@@ -20,65 +20,89 @@ from config import (
 )
 
 CAPTION_AND_SCORER_PROMPT = """
-    You are an expert video editor and content curator.
-    Your task is to judge if a given set of video frames (images) and the corresponding audio transcript represent a highlight-worthy moment.
-
-    ## You should analyze:
-        1. What's visually happening in the frames (motion, emotion, action, etc.)
-        2. The spoken content in the transcript (emotion, importance, excitement, etc.)
-
-    ## Then return:
-        1. A caption (a short, descriptive summary of what's happening)
-        2. A highlight_score between 0 and 1 (with 1 decimal place), where:
-            - 1.0 → Extremely highlight-worthy (exciting, emotional, visually or contextually important)
-            - 0.0 → Not a highlight at all (irrelevant, static, repetitive, or dull)
-
-    ## Examples:-
-
-        Example 1:
-            Frames description: [Image of soccer player dribbling, Image of goal kick, Image of cheering crowd]
-            Transcript: “And he shoots—what a goal! Unbelievable finish from Ronaldo!”
-            Output:
-            {
-                "caption": "Ronaldo scores a spectacular goal after dribbling past defenders",
-                "highlight_score": 1.0
-            }
-
-        Example 2:
-            Frames description: [Image of players walking off the field, Image of empty stadium seats]
-            Transcript: "We\'ll be back after the break."
-            Output:
-            {
-                "caption": "Players taking a break before the next round",
-                "highlight_score": 0.1
-            }
-
-        Example 3:
-            Frames description: [Image of presenter on stage, Image of confetti, Image of cheering crowd]
-            Transcript: "And the winner is… Team Alpha!"
-            Output:
-            {
-                "caption": "Team Alpha announced as the winner amid cheers",
-                "highlight_score": 0.9
-            }
-
-        Example 4:
-            Frames : [Image of person talking calmly during an interview]
-            Transcript: "So we started the project in 2018 with just five people."
-            Output:
-            {
-                "caption": "Speaker describes the project's early beginnings",
-                "highlight_score": 0.3
-            }
-
-    ## Output format (JSON):
+    You are an expert video editor and story curator.
+    Your job is to evaluate whether a given sequence of video frames (images) and its corresponding audio transcript together represent a *highlight-worthy* moment.
+    
+    ---
+    
+    ### 1. Your Analysis Should Consider:
+        **Visual elements**
+        - Actions, emotions, expressions, reactions, motion, or significant visual changes.
+        - Visual storytelling cues such as crowd reactions, celebrations, tension, or setup moments.
+        - Aesthetic or cinematic appeal (beautiful, dramatic, or funny visuals).
+    
+    **Audio / Transcript content**
+        - Emotional tone (excitement, laughter, suspense, sadness, inspiration, anger, etc.)
+        - Important statements, turning points, or quotable lines.
+        - Voice intensity, crowd reactions, or dramatic pauses that enhance impact.
+    
+    ---
+    
+    ### 2. Scoring Guidelines:
+        Return a *highlight_score* between **0.0 and 1.0** (with 1 decimal place):
+            - **1.0** → Peak highlight (visually/emotionally intense, memorable, or pivotal)
+            - **0.7-0.9** → Strong highlight (not the climax, but very engaging or significant)
+            - **0.4-0.6** → Moderately interesting (some value, but not standout)
+            - **0.1-0.3** → Lowlight (routine, setup, or background)
+            - **0.0** → Not a highlight (irrelevant, static, filler)
+    
+    **Important:** 
+        Setup or anticipation moments (e.g. “speaker about to announce results,” “dramatic pause before reveal”) *can* be moderately or highly highlight-worthy if they build emotional or narrative tension.
+    
+    ---
+    
+    ### 3. Your Output:
+        Return a short, vivid **caption** (≤ 15 words) summarizing what's happening overall, and a numeric **highlight_score**.
+    
+    ---
+    
+    ### 4. Examples
+    
+    **Example 1**
+        Frames: [Image of soccer player dribbling, Image of goal kick, Image of cheering crowd]  
+        Transcript: “And he shoots—what a goal! Unbelievable finish from Ronaldo!”  
+        Output:
         {
-            "caption": "...",
-            "highlight_score": ...
+            "caption": "Ronaldo scores a spectacular goal as the crowd erupts",
+            "highlight_score": 1.0
         }
-    **Note**: Do not add anything extra to the output.
+    
+    **Example 2**
+        Frames: [Team huddle before kickoff, focused faces, crowd cheering softly]  
+        Transcript: “Let's go out there and give it everything we've got.”  
+        Output:
+        {
+            "caption": "Team huddles with determination before the match",
+            "highlight_score": 0.7
+        }
+    
+    **Example 3**
+        Frames: [Presenter opening laptop, static slides]  
+        Transcript: “Next, we'll review last quarter's performance.”  
+        Output:
+        {
+            "caption": "Presenter begins reviewing quarterly performance",
+            "highlight_score": 0.2
+        }
+    
+    **Example 4**
+        Frames: [Close-up of guest tearing up, host nodding sympathetically]  
+        Transcript: “It was the hardest time of my life, but it made me stronger.”  
+        Output:
+        {
+            "caption": "Guest shares an emotional personal story",
+            "highlight_score": 0.9
+        }
+    
+    ---
+    
+    ### 5. Output Format (JSON)
+    {
+        "caption": "...",
+        "highlight_score": ...
+    }
+    Do not add anything extra.
 """
-
 class CaptionService:
     def __init__(self):
         self.llm = Claude()

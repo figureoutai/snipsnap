@@ -15,7 +15,11 @@ GROUPING_AND_TITLE_PROMPT = """
         2. Compare adjacent sentences and decide whether each pair belongs to the same event.
         3. Merge contiguous sentences into a group when they describe the same event.
         4. Each group must be contiguous (consecutive indexes).
-        5. Give each group a short descriptive title (3-6 words is ideal).
+        5. Give each group a short descriptive title (3-6 words is ideal). Do not give generic titles, give something that signifies the highlight. 
+            For examples:- 
+                1. Messi scored goal
+                2. Car crash
+                3. New product unveiled
         6. Return only a valid JSON object with a top-level key "groups" whose value is a list of groups. Each group is an object with "title" and "indexes" (0-based list of integers).
         7. Do not output any reasoning, explanations, or extra text — only the JSON.
         8. If a sentence is unique (not contiguous with same-event neighbors), it becomes a single-item group.
@@ -164,6 +168,7 @@ class AssortClipsService:
         i = 0
         await self.intialize_db_service()
         while True:
+            stream = await self.db_service.get_stream(stream_id)
             if should_break:
                 logger.info("[AssortClipsService] exiting assort clips service.")
                 break
@@ -190,14 +195,16 @@ class AssortClipsService:
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
-                if (highlight_score >= 0.7) or (saliency_score >= 0.8 and highlight_score >= 0.6):
+                logger.info(f"[AssortClipsService] saliency: {saliency_score} and highlight score {highlight_score} for clip {clip["start_time"]} - {clip["end_time"]}")
+                if (highlight_score >= 0.7) or (saliency_score >= 0.7 and highlight_score >= 0.6):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
 
             highlight_groups = self.consolidate_groups(self.get_one_groups(potential_highlights))
 
-            highlights = []
+            highlights = stream["highlights"] if "highlights" in stream else []
+            highlights = [] if not highlights else json.loads(highlights)
 
             for (start_idx, end_idx) in highlight_groups:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
