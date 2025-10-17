@@ -93,7 +93,7 @@ class VideoProcessor:
                 # upload image to S3
                 self.s3_writer.upload_image_nowait(
                     stream_id = stream_id,
-                    file_data = img.tobytes(),
+                    image_file = img,
                     filename = filename
                 )
                 
