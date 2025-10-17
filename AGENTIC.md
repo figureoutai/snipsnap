@@ -31,7 +31,7 @@ This document describes the current agentic refinement at the end of the pipelin
   - `use_topic` → `snap_window(..., priority='topic_first')`.
   - `use_scene` → `snap_window(..., priority='scene_first')`.
   - `micro_adjust` → apply small deltas to the snapped baseline.
-- Verify: enforce `HIGHLIGHT_MIN_LEN ≤ length ≤ HIGHLIGHT_MAX_LEN`, midpoint safety; clamp/ignore invalid deltas, otherwise fall back to baseline.
+- Verify: enforce midpoint safety and clamp each edge to `±MAX_EDGE_SHIFT_SECONDS` relative to the original grouped span; optionally apply `HIGHLIGHT_MIN_LEN/MAX_LEN` as sanity. If invalid after clamping, fall back to baseline.
 - Reason: compose `snap_reason` from plan + applied deltas and/or boundary sources.
 
 ## Full End‑to‑End Flow
@@ -57,8 +57,20 @@ flowchart TD
   N --> O
   O --> P["EdgeRefiner (LLM plan)"]
   P --> Q["Apply plan (snap/adjust)"]
-  Q --> R["Verify (bounds/midpoint)"]
-  R --> S["Write highlights JSON to stream_metadata"]
+  Q --> R["Clamp edges to ±MAX_EDGE_SHIFT_SECONDS"]
+  R --> S["Verify (bounds/midpoint)"]
+  S --> T["Write highlights JSON to stream_metadata"]
+```
+
+## Config Knobs (config.py)
+
+- Master toggle:
+  - `AGENTIC_REFINEMENT_ENABLED` — when False, the assort stage returns grouped highlights without boundary snapping or LLM refinement.
+
+- Edge budget & duration sanity:
+  - `MAX_EDGE_SHIFT_SECONDS` — per-edge clamp after refinement.
+  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN` — optional sanity bounds.
+- TextTiling parameters: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`.
 ```
 
 

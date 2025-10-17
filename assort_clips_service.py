@@ -8,15 +8,11 @@ from config import (
     HIGHLIGHT_CHUNK,
     CANDIDATE_SLICE,
     VIDEO_FRAME_SAMPLE_RATE,
-    SNAP_MAX_SHIFT_SCENE_START,
-    SNAP_MAX_SHIFT_SCENE_END,
-    SNAP_MAX_SHIFT_TOPIC,
     HIGHLIGHT_MIN_LEN,
     HIGHLIGHT_MAX_LEN,
-    HIGHLIGHT_MAX_LEN,
     BASE_DIR,
-    LLM_SNAP_ARBITRATE,
-    LLM_SNAP_MIN_DELTA_SEC,
+    MAX_EDGE_SHIFT_SECONDS,
+    AGENTIC_REFINEMENT_ENABLED,
 )
 from utils.logger import app_logger as logger
 from utils.helpers import get_video_frame_filename
@@ -184,6 +180,26 @@ class AssortClipsService:
     async def has_more_clips(self, stream_id, end_time):
         return await self.db_service.has_more_entries_after(stream_id, end_time)
 
+    def _clamp_to_edge_budget(self, orig_start: float, orig_end: float, new_start: float, new_end: float):
+        """Clamp each edge shift to MAX_EDGE_SHIFT_SECONDS relative to original.
+        If clamping breaks duration guardrails, fall back to the original span.
+        """
+        max_shift = MAX_EDGE_SHIFT_SECONDS
+        s_min = orig_start - max_shift
+        s_max = orig_start + max_shift
+        e_min = orig_end - max_shift
+        e_max = orig_end + max_shift
+
+        clamped_start = min(max(new_start, s_min), s_max)
+        clamped_end = min(max(new_end, e_min), e_max)
+
+        # Validate guardrails after clamping
+        if clamped_end - clamped_start < HIGHLIGHT_MIN_LEN or clamped_end - clamped_start > HIGHLIGHT_MAX_LEN:
+            return orig_start, orig_end
+        if clamped_start >= clamped_end:
+            return orig_start, orig_end
+        return clamped_start, clamped_end
+
     async def _flatten_transcript_words(self, stream_id: str):
         rows = await self.db_service.get_audios_by_stream(stream_id=stream_id)
         words = []
@@ -253,16 +269,19 @@ class AssortClipsService:
     def _snap_highlight(self, stream_id: str, start: float, end: float):
         scenes = self._scene_boundaries.get(stream_id, [])
         topics = self._topic_boundaries.get(stream_id, [])
+        # Use generous bounds; final clamping to MAX_EDGE_SHIFT_SECONDS is applied after snapping
+        generous_min = 1.0
+        generous_max = max(generous_min + 0.5, (end - start) + 2 * MAX_EDGE_SHIFT_SECONDS)
         s, e, tags = snap_window(
             start,
             end,
             scene_boundaries=scenes,
             topic_boundaries=topics,
-            max_shift_scene_start=SNAP_MAX_SHIFT_SCENE_START,
-            max_shift_scene_end=SNAP_MAX_SHIFT_SCENE_END,
-            max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
-            min_len=HIGHLIGHT_MIN_LEN,
-            max_len=HIGHLIGHT_MAX_LEN,
+            max_shift_scene_start=MAX_EDGE_SHIFT_SECONDS,
+            max_shift_scene_end=MAX_EDGE_SHIFT_SECONDS,
+            max_shift_topic=MAX_EDGE_SHIFT_SECONDS,
+            min_len=generous_min,
+            max_len=generous_max,
             priority="topic_first",
         )
         return s, e, tags
@@ -312,75 +331,90 @@ class AssortClipsService:
                 groups = await self.title_service.group_and_generate_title([clip["caption"] for clip in scored_clips[start_idx:end_idx+1]])
                 for group in groups:
                     l, r = start_idx + group["indexes"][0], start_idx + group["indexes"][-1]
+                    # Fast path: if agentic refinement is disabled, emit grouped highlights as-is
+                    if not AGENTIC_REFINEMENT_ENABLED:
+                        highlight = {
+                            "start_time": scored_clips[l]["start_time"],
+                            "end_time": scored_clips[r]["end_time"],
+                            "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
+                            "thumbnail": get_video_frame_filename(l),
+                            "title": group["title"],
+                            "snap_reason": None,
+                        }
+                        highlights.append(highlight)
+                        continue
                     # Agentic refinement: compute boundaries once, then snap this highlight
                     await self._ensure_boundaries(stream_id, clip_scorer_event)
                     orig_start = scored_clips[l]["start_time"]
                     orig_end = scored_clips[r]["end_time"]
                     snapped_start, snapped_end, snap_tags = self._snap_highlight(stream_id, orig_start, orig_end)
+                    snapped_start, snapped_end = self._clamp_to_edge_budget(orig_start, orig_end, snapped_start, snapped_end)
 
                     # LLM agentic refinement (simple plan -> act -> verify)
                     chosen_start, chosen_end = snapped_start, snapped_end
                     snap_reason = None
-                    if LLM_SNAP_ARBITRATE:
-                        if self.edge_refiner is None:
-                            self.edge_refiner = EdgeRefiner()
-                        try:
-                            plan = await self.edge_refiner.refine(
-                                stream_id,
-                                base_path=f"{BASE_DIR}/{stream_id}",
-                                snapped_start=snapped_start,
-                                snapped_end=snapped_end,
-                                topic_boundaries=self._topic_boundaries.get(stream_id, []),
-                                scene_boundaries=self._scene_boundaries.get(stream_id, []),
-                                min_len=HIGHLIGHT_MIN_LEN,
-                                max_len=HIGHLIGHT_MAX_LEN,
+                    if self.edge_refiner is None:
+                        self.edge_refiner = EdgeRefiner()
+                    try:
+                        plan = await self.edge_refiner.refine(
+                            stream_id,
+                            base_path=f"{BASE_DIR}/{stream_id}",
+                            snapped_start=snapped_start,
+                            snapped_end=snapped_end,
+                            topic_boundaries=self._topic_boundaries.get(stream_id, []),
+                            scene_boundaries=self._scene_boundaries.get(stream_id, []),
+                            min_len=HIGHLIGHT_MIN_LEN,
+                            max_len=HIGHLIGHT_MAX_LEN,
+                        )
+                        action = plan.get("action", "keep")
+                        sd = float(plan.get("start_delta", 0.0))
+                        ed = float(plan.get("end_delta", 0.0))
+                        reason_txt = str(plan.get("reason", ""))
+
+                        # Execute the plan deterministically
+                        if action == "use_topic":
+                            chosen_start, chosen_end, _ = self._snap_highlight(stream_id, orig_start, orig_end)
+                            chosen_start, chosen_end = self._clamp_to_edge_budget(orig_start, orig_end, chosen_start, chosen_end)
+                        elif action == "use_scene":
+                            # Force scene-first by swapping priority for this call
+                            scenes = self._scene_boundaries.get(stream_id, [])
+                            topics = self._topic_boundaries.get(stream_id, [])
+                            from utils.boundary_snapper import snap_window
+                            generous_min = 1.0
+                            generous_max = max(generous_min + 0.5, (orig_end - orig_start) + 2 * MAX_EDGE_SHIFT_SECONDS)
+                            chosen_start, chosen_end, _ = snap_window(
+                                orig_start,
+                                orig_end,
+                                scene_boundaries=scenes,
+                                topic_boundaries=topics,
+                                max_shift_scene_start=MAX_EDGE_SHIFT_SECONDS,
+                                max_shift_scene_end=MAX_EDGE_SHIFT_SECONDS,
+                                max_shift_topic=MAX_EDGE_SHIFT_SECONDS,
+                                min_len=generous_min,
+                                max_len=generous_max,
+                                priority="scene_first",
                             )
-                            action = plan.get("action", "keep")
-                            sd = float(plan.get("start_delta", 0.0))
-                            ed = float(plan.get("end_delta", 0.0))
-                            reason_txt = str(plan.get("reason", ""))
-
-                            # Execute the plan deterministically
-                            if action == "use_topic":
-                                chosen_start, chosen_end, _ = self._snap_highlight(stream_id, orig_start, orig_end)
-                            elif action == "use_scene":
-                                # Force scene-first by swapping priority for this call
-                                scenes = self._scene_boundaries.get(stream_id, [])
-                                topics = self._topic_boundaries.get(stream_id, [])
-                                from utils.boundary_snapper import snap_window
-                                chosen_start, chosen_end, _ = snap_window(
-                                    orig_start,
-                                    orig_end,
-                                    scene_boundaries=scenes,
-                                    topic_boundaries=topics,
-                                    max_shift_scene_start=SNAP_MAX_SHIFT_SCENE_START,
-                                    max_shift_scene_end=SNAP_MAX_SHIFT_SCENE_END,
-                                    max_shift_topic=SNAP_MAX_SHIFT_TOPIC,
-                                    min_len=HIGHLIGHT_MIN_LEN,
-                                    max_len=HIGHLIGHT_MAX_LEN,
-                                    priority="scene_first",
-                                )
-                            elif action == "micro_adjust":
-                                # Apply small deltas to the snapped baseline with guardrails
-                                mid = (snapped_start + snapped_end) / 2.0
-                                new_start = snapped_start + sd
-                                new_end = snapped_end + ed
-                                # midpoint safety
-                                if new_start > mid:
-                                    new_start = snapped_start
-                                if new_end < mid:
-                                    new_end = snapped_end
-                                # duration guardrails
-                                if (new_end - new_start) < HIGHLIGHT_MIN_LEN or (new_end - new_start) > HIGHLIGHT_MAX_LEN:
-                                    new_start, new_end = snapped_start, snapped_end
-                                chosen_start, chosen_end = new_start, new_end
-                            else:
-                                # keep
+                            chosen_start, chosen_end = self._clamp_to_edge_budget(orig_start, orig_end, chosen_start, chosen_end)
+                        elif action == "micro_adjust":
+                            # Apply small deltas to the snapped baseline with midpoint and edge budget guards
+                            mid = (snapped_start + snapped_end) / 2.0
+                            new_start = snapped_start + sd
+                            new_end = snapped_end + ed
+                            # midpoint safety
+                            if new_start > mid:
+                                new_start = snapped_start
+                            if new_end < mid:
+                                new_end = snapped_end
+                            chosen_start, chosen_end = self._clamp_to_edge_budget(orig_start, orig_end, new_start, new_end)
+                            if chosen_end <= chosen_start:
                                 chosen_start, chosen_end = snapped_start, snapped_end
+                        else:
+                            # keep
+                            chosen_start, chosen_end = snapped_start, snapped_end
 
-                            snap_reason = f"LLM plan={action}; applied deltas start {chosen_start-snapped_start:+.2f}s, end {chosen_end-snapped_end:+.2f}s; {reason_txt}"
-                        except Exception as e:
-                            logger.warning(f"[AssortClipsService] LLM EdgeRefiner failed: {e}")
+                        snap_reason = f"LLM plan={action}; applied deltas start {chosen_start-snapped_start:+.2f}s, end {chosen_end-snapped_end:+.2f}s; {reason_txt}"
+                    except Exception as e:
+                        logger.warning(f"[AssortClipsService] LLM EdgeRefiner failed: {e}")
                     if snap_reason is None and (snapped_start != orig_start or snapped_end != orig_end):
                         snap_reason = (
                             f"Snapped to {snap_tags.get('start_source','original')}/"
