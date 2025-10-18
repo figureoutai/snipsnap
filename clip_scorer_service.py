@@ -230,11 +230,11 @@ class ClipScorerService:
                 continue
 
             frame_metdata = await self.db_service.get_videos_by_stream(
-                stream_id=stream_id, 
+                stream_id=stream_id,
                 start_frame=start_time*VIDEO_FRAME_SAMPLE_RATE,
                 limit=CANDIDATE_SLICE*VIDEO_FRAME_SAMPLE_RATE
-            )       
-            
+            )
+
             if (len(frame_metdata) != CANDIDATE_SLICE * VIDEO_FRAME_SAMPLE_RATE) or (len(audio_metadata) != len(audio_chunk_indexes)):
                 if audio_processor_event.is_set() and video_processor_event.is_set():
                     should_break = True

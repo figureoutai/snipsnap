@@ -40,6 +40,26 @@ STEP_BACK = 2
 BASE_DIR = "./data"
 
 HIGHLIGHT_CHUNK = 300
+
+# --- Agentic Boundary / Duration (defaults) ---
+# Enforce clip duration sanity after refinement (seconds)
+HIGHLIGHT_MIN_LEN = 4.0
+HIGHLIGHT_MAX_LEN = 12.0
+
+# TextTiling parameters (topic segmentation over ASR words)
+TEXT_TILING_BLOCK = 20
+TEXT_TILING_STEP = 10
+TEXT_TILING_SMOOTH = 2
+TEXT_TILING_CUTOFF_STD = 0.5
+
+# Hard cap on how much an edge can move compared to the original (per side)
+# Positive = extend, Negative = shorten. Applied independently to start and end.
+MAX_EDGE_SHIFT_SECONDS = 60.0
+
+# Master toggle for post-grouping agentic refinement steps
+# When False: after grouping, we skip boundary snapping, topic/scene detection,
+# and LLM refinement, and return grouped highlights as-is.
+AGENTIC_REFINEMENT_ENABLED = True
 MAX_STREAM_DURATION = 300
 
 MEDIACONVERT_ROLE_ARN = os.environ.get("MEDIACONVERT_ROLE_ARN")

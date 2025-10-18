@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql-container
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: notrootpassword # Root password
+      MYSQL_DATABASE: video_processing_db # Create database on startup
+      MYSQL_USER: admin # Create a new user
+      MYSQL_PASSWORD: somekindofpassword # Password for that user
+    ports:
+      - "3306:3306" # Expose MySQL to localhost
+    volumes:
+      - mysql_data:/var/lib/mysql # Persist data
+
+volumes:
+  mysql_data:
