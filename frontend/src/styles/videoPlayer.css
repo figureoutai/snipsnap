@@ -22,7 +22,7 @@
   background: white;
   border-radius: 999px;
   cursor: pointer;
-  overflow: hidden;
+  /* overflow: hidden; */
 }
 
 .highlight-range {
