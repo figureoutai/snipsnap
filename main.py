@@ -149,16 +149,13 @@ def convert_to_hls_and_store(
 async def main():
     logger.info("[Main] trying to read the message from environment....")
     # Parse job message
-    # JOB_MESSAGE = os.environ.get("JOB_MESSAGE")
-    # if JOB_MESSAGE is None:
-    #     logger.info("No JOB_MESSAGE provided. Exiting without work.")
-    #     return
+    JOB_MESSAGE = os.environ.get("JOB_MESSAGE")
+    if JOB_MESSAGE is None:
+        logger.info("No JOB_MESSAGE provided. Exiting without work.")
+        return
 
     try:
-        parsed_msg = {
-            "stream_id": f"{uuid.uuid4()}",
-            "stream_url": "./data/test_videos/news.mp4"
-        }
+        parsed_msg = json.loads(JOB_MESSAGE)
     except (TypeError, json.JSONDecodeError):
         logger.error("No JOB_MESSAGE provided. Exiting without work.")
         return

@@ -345,7 +345,7 @@ class AssortClipsService:
                             "start_time": scored_clips[l]["start_time"],
                             "end_time": scored_clips[r]["end_time"],
                             "caption": ' '.join([clip["caption"] for clip in scored_clips[l:r+1]]),
-                            "thumbnail": get_video_frame_filename(l),
+                            "thumbnail": get_video_frame_filename(l*VIDEO_FRAME_SAMPLE_RATE),
                             "title": group["title"],
                             "snap_reason": None,
                         }
