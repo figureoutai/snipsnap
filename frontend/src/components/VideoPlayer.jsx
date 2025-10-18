@@ -43,7 +43,7 @@ const VideoPlayer = forwardRef(({ src, ranges = [], onSegmentChange }, ref) => {
   }, [onSegmentChange]);
 
   const findActiveSegment = useCallback((startTime) => {
-    return normalized.findIndex((segment) => (startTime >= segment.start) && (startTime < segment.end));
+    return normalized.findLastIndex((segment) => (startTime >= segment.start) && (startTime < segment.end));
   }, [normalized]);
 
   const updateActiveSegmentForTime = useCallback((time) => {
