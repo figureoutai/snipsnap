@@ -16,7 +16,7 @@ class Claude(LLM):
         self.config = Config(read_timeout=300)
         self.session = get_session()
 
-    @retry_with_backoff(retries=3, backoff_in_seconds=2)
+    @retry_with_backoff(retries=5, backoff_in_seconds=5)
     async def invoke(self, prompt: str, response_type: str, queries: List[str] = [], images: List[str] = [], max_tokens: int = 300,):
         content = [
             *[{"type": "text", "text": query} for query in queries if query and query != EMPTY_STRING],

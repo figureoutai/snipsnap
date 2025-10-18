@@ -15,9 +15,9 @@ class AuroraService:
         self.host = DB_HOST
         self.database = DB_NAME
         self.port = DB_PORT
-        # secrets = get_secret(DB_SECRET_NAME, AWS_REGION)
-        self.user = "admin"
-        self.password = "somekindofpassword"
+        secrets = get_secret(DB_SECRET_NAME, AWS_REGION)
+        self.user = secrets["username"]
+        self.password = secrets["password"]
         self.pool_size = pool_size
         self.pool = None
 
