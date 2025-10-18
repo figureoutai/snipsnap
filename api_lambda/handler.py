@@ -29,6 +29,7 @@ DB_NAME = os.environ["DB_NAME"]
 STREAM_METADATA_TABLE = os.environ["STREAM_METADATA_TABLE"]
 FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "*")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "").split(",")
+ACCEPT_STREAMS = os.environ.get("ACCEPT_STREAMS", "false").lower() == "true"
 
 print("version 2")
 
@@ -145,6 +146,13 @@ def video_receiver(event, context):
         
         if not is_video_url(stream_url):
             raise ValueError("stream_url is not reachable or the content is not in supported video formats")
+        
+        if not ACCEPT_STREAMS:
+            return {
+                "statusCode": 403,
+                "headers": _cors_headers(event),
+                "body": json.dumps({"ok": False, "error": "server is not accepting the streams at he moment"}),
+            }
 
         logger.info("Received stream url: %s", stream_url)
 

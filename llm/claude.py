@@ -12,7 +12,7 @@ class Claude(LLM):
     def __init__(self):
         super().__init__()
         self.region = "us-east-1"
-        self.model_id = "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+        self.model_id = "us.anthropic.claude-sonnet-4-20250514-v1:0"
         self.config = Config(read_timeout=300)
         self.session = get_session()
 

@@ -60,6 +60,6 @@ MAX_EDGE_SHIFT_SECONDS = 60.0
 # When False: after grouping, we skip boundary snapping, topic/scene detection,
 # and LLM refinement, and return grouped highlights as-is.
 AGENTIC_REFINEMENT_ENABLED = True
-MAX_STREAM_DURATION = 180
+MAX_STREAM_DURATION = 300
 
 MEDIACONVERT_ROLE_ARN = os.environ.get("MEDIACONVERT_ROLE_ARN")

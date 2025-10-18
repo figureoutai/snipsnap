@@ -42,6 +42,7 @@ provider:
     # Frontend origin used by Lambdas for response headers
     FRONTEND_ORIGIN: !Sub https://${FrontendDistribution.DomainName}
     ALLOWED_ORIGINS: ["http://localhost:5173"]
+    ACCEPT_STREAMS: False
 
   iamRoleStatements:
     - Effect: Allow

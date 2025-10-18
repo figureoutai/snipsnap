@@ -23,3 +23,10 @@ node_modules/
 .serverless/
 .env
 .requirements*
+
+data/**/football.mp4
+data/**/ted-talk.mp4
+data/**/nbc-news.mp4
+data/**/agad-chess.mp4
+
+.DS_Store
