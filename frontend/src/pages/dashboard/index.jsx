@@ -129,6 +129,14 @@ function Dashboard() {
                             placeholder="Enter video URL"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    if (!submitting) {
+                                        handleGenerate();
+                                    }
+                                }
+                            }}
                         />
                         <button
                             className="generate-btn"
