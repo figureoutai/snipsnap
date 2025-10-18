@@ -1,6 +1,6 @@
 export const INVALID_VIDEO_URL_MESSAGE = {
     title: 'Invalid Video URL',
-    description: 'Please enter a valid video file URL. Supported formats: MP4, MKV, AVI, MOV, WMV, FLV'
+    description: 'Please enter a valid video file URL. Supported formats: MP4, MKV, AVI, MOV, WMV, FLV, M3U8'
 }
 
 export const PROCESSING_INFO_MESSAGE = {
@@ -11,4 +11,9 @@ export const PROCESSING_INFO_MESSAGE = {
 export const GENERIC_VIDEO_SUBMIT_ERROR = {
     title: 'Submission Failed',
     description: 'Failed to submit video. Please try again.'
+}
+
+export const INCORRECT_VIDEO_URL = {
+    title: 'Submission Failed',
+    description: 'The provided video URL is not reachable or not in a supported video format.'
 }

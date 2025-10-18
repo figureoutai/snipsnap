@@ -21,7 +21,20 @@ const useSubmitVideo = () => {
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                // Try to extract a useful message from the backend response
+                let message = `HTTP error ${response.status}`;
+                try {
+                    const payload = await response.json();
+                    message = payload?.error || payload?.message || payload?.detail || message;
+                } catch (_) {
+                    try {
+                        const text = await response.text();
+                        message = text || message;
+                    } catch (_) {
+                        // fall back to default message
+                    }
+                }
+                throw new Error(message);
             }
 
             const data = await response.json();
