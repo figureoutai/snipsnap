@@ -18,4 +18,5 @@ dependencies = [
     "pillow>=11.3.0",
     "pymysql>=1.1.2",
     "sqlalchemy>=2.0.43",
+    "cryptography>=46.0.3",
 ]

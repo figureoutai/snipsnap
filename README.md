@@ -7,6 +7,16 @@
 
 > `[Stream Processor] Ending the stream, exiting.` After this log press Ctrl+C to stop the program.
 
+## Running (Batch)
+
+- The entrypoint reads a JSON job from the `JOB_MESSAGE` environment variable.
+- Example:
+
+```
+export JOB_MESSAGE='{"stream_url": "https://example.com/video.mp4", "stream_id": "demo-123"}'
+uv run main
+```
+
 ## Work Flow
 
 ![Work Flow](./workflow.png)
@@ -96,14 +106,35 @@ class SaliencyScorer:
     - Mark peaks where score > threshold (e.g., 90th percentile).
     - Merge overlapping/adjacent peaks to form continuous highlight intervals.
 
-#### Post Processing:
+#### Post Processing (Highlights)
 
-    - Speech Alignment
-    - Context Addition
-    - Scene Alignment using pyscenedetect
-    - Ranking and Output
+    - Group & Title contiguous 5s clips (LLM grouping)
+    - Baseline Snap (topic-first):
+        * Topic boundaries via TextTiling on transcripts (refreshed as transcripts grow)
+        * Scene cuts from saved frames (HSV histogram distance)
+    - Agentic Refinement (assort stage):
+        * LLM observes transcript + edge/mid frames + nearest boundaries
+        * LLM plans ONE action: keep | use_topic | use_scene | micro_adjust
+        * System executes plan deterministically and clamps each edge to ±MAX_EDGE_SHIFT_SECONDS relative to the original grouped span
+        * Writes a short snap_reason explaining the change
+    - Finalize highlights (thumbnail based on chosen start)
 
-### Deploy
+## Agentic Refinement (Docs)
+
+- See `agentic.md` for the full description of the Observe → Plan (LLM) → Act → Verify loop and a Mermaid diagram of the end-to-end flow.
+
+## Configuration
+
+- Master toggle (config.py)
+  - `AGENTIC_REFINEMENT_ENABLED` — when False, post-grouping steps (snapping, boundaries, LLM) are skipped and grouped highlights are returned as-is.
+
+- Edge budget & duration sanity (config.py)
+  - `MAX_EDGE_SHIFT_SECONDS` (per-edge clamp after refinement)
+  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN` (sanity bounds)
+- TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`
+  - `AGENTIC_REFINEMENT_ENABLED = True` (master toggle for all post-grouping steps)
+
+### How to Deploy
 Running `./deploy.sh` deploys everything, frontend, backend and infra
 deploy.sh
 - --frontend: build Vite app, upload to S3, invalidate CloudFront.

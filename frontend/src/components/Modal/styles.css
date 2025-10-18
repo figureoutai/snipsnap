@@ -1,0 +1,120 @@
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(10, 25, 47, 0.7); /* Darkest blue with opacity */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: #172A45; /* Medium blue */
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 25px -5px rgba(10, 25, 47, 0.2), 0 10px 10px -5px rgba(10, 25, 47, 0.1);
+    animation: modal-appear 0.3s ease-out;
+}
+
+.modal-header {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
+.modal-header.error {
+    background-color: #0A192F; /* Darkest blue */
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-header.info {
+    background-color: #304869; /* Lighter blue */
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-close:hover {
+    background-color: rgba(230, 213, 208, 0.1); /* Light pinkish beige with low opacity */
+}
+
+.modal-body {
+    padding: 24px;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-footer {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid #304869; /* Lighter blue */
+}
+
+.modal-button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.modal-button.error {
+    background-color: #0A192F; /* Darkest blue */
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-button.error:hover {
+    background-color: #172A45; /* Medium blue */
+}
+
+.modal-button.info {
+    background-color: #304869; /* Lighter blue */
+    color: #E6D5D0; /* Light pinkish beige */
+}
+
+.modal-button.info:hover {
+    background-color: #405C80; /* Even lighter blue */
+}
+
+@keyframes modal-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
