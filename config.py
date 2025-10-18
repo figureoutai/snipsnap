@@ -17,7 +17,7 @@ AUDIO_METADATA_TABLE_NAME = "audio_metadata"
 SCORE_METADATA_TABLE = "score_metadata"
 STREAM_METADATA_TABLE = "stream_metadata"
 
-DB_HOST = os.environ.get("DB_URL", "localhost")
+DB_HOST = os.environ.get("DB_URL", "highlight-clipping-service-main-auroracluster-o27b01gfhdja.cluster-ckdseak4qyg6.us-east-1.rds.amazonaws.com")
 DB_PORT = 3306
 DB_SECRET_NAME = os.environ.get("SECRET_NAME", "rds!cluster-00500b97-b996-4bb1-9e88-00aef1715034")
 
