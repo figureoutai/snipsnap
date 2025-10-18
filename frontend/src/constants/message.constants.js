@@ -1,6 +1,6 @@
 export const INVALID_VIDEO_URL_MESSAGE = {
     title: 'Invalid Video URL',
-    description: 'Please enter a valid video file URL. Supported formats: MP4, MKV, AVI, MOV, WMV, FLV'
+    description: 'Please enter a valid video file URL. Supported formats: MP4, MKV, AVI, MOV, WMV, FLV, M3U8'
 }
 
 export const PROCESSING_INFO_MESSAGE = {
