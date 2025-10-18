@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useMemo, memo } from "react";
 import VideoPlayer from "../../components/VideoPlayer";
 import Loader from "../../components/Loader";
 import Header from "../../components/Header";
@@ -7,6 +7,8 @@ import { constructThumbnailURL, constructVideoURL } from "../../utils/assetURL";
 import { formatTime } from "../../utils/time";
 import "../../styles/highlight.css";
 
+
+const MemoizedVideoPlayer = memo(VideoPlayer);
 
 function Highlights() {
     
@@ -18,18 +20,34 @@ function Highlights() {
     const handleHighlightClick = useCallback((item) => {
         if (videoPlayerRef.current) {
             videoPlayerRef.current.seekAndPlay(item.start_time, item.end_time);
-            setSelectedCaption(item.caption);
         }
     }, []);
+
+    // Memoize highlights data to prevent unnecessary re-renders
+    const highlightsData = useMemo(() => data?.highlightsTimestamps || [], [data?.highlightsTimestamps]);
+
+    // Memoize the ranges prop to prevent recreation
+    const videoRanges = useMemo(() => 
+        highlightsData.map((item) => ({
+            start: item.start_time,
+            end: item.end_time
+        })),
+        [highlightsData]
+    );
 
     const handleSegmentChange = useCallback((index) => {
         if (index === -1) {
             setSelectedCaption(undefined);
-        } else if (data?.highlightsTimestamps?.[index]) {
-            setSelectedCaption(data.highlightsTimestamps[index].caption);
+        } else if (highlightsData[index]) {
+            setSelectedCaption(highlightsData[index].caption);
         }
-    }, [data?.highlightsTimestamps]);
-   
+    }, [highlightsData]);
+    
+    const sourceVideoURL = useMemo(() => {
+        if(!data)
+            return '';
+        return constructVideoURL(data.streamId, data.streamURL.split("/").splice(-1)[0]);
+    }, [data]);
 
     return (
         <div className="highlights-container">
@@ -53,13 +71,16 @@ function Highlights() {
                     <>
                         <div className="main-content">
                             <div className="video-container">
-                                <VideoPlayer
+                                {/* <VideoPlayer
                                     ref={videoPlayerRef}
                                     src={constructVideoURL(data.streamId, data.streamURL.split("/").splice(-1)[0])}
-                                    ranges={data.highlightsTimestamps.map((item) => ({
-                                        start: item.start_time,
-                                        end: item.end_time
-                                    }))}
+                                    ranges={videoRanges}
+                                    onSegmentChange={handleSegmentChange}
+                                /> */}
+                                <MemoizedVideoPlayer
+                                    ref={videoPlayerRef}
+                                    src={sourceVideoURL}
+                                    ranges={videoRanges}
                                     onSegmentChange={handleSegmentChange}
                                 />
                             </div>

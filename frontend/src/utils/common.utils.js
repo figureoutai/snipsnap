@@ -3,7 +3,7 @@ export function isValidVideoURL(url) {
     try {
         new URL(url);
         // Check if URL ends with common video extensions
-        return /\.(mp4|mkv|avi|mov|wmv|flv)$/i.test(url);
+        return /\.(mp4|mkv|avi|mov|wmv|flv|m3u8)$/i.test(url);
     } catch {
         return false;
     }
