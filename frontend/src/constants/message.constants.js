@@ -12,3 +12,8 @@ export const GENERIC_VIDEO_SUBMIT_ERROR = {
     title: 'Submission Failed',
     description: 'Failed to submit video. Please try again.'
 }
+
+export const INCORRECT_VIDEO_URL = {
+    title: 'Submission Failed',
+    description: 'The provided video URL is not reachable or not in a supported video format.'
+}

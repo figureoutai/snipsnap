@@ -190,6 +190,15 @@ def video_receiver(event, context):
             "body": json.dumps(resp),
         }
 
+    except (KeyError, ValueError) as e:
+        # Client error: missing or invalid stream_url
+        message = e.args[0] if getattr(e, "args", None) else str(e)
+        logger.warning("Bad request: %s", message)
+        return {
+            "statusCode": 400,
+            "headers": _cors_headers(event),
+            "body": json.dumps({"ok": False, "error": message}),
+        }
     except Exception as e:
         logger.exception("video_receiver failed: %s", e)
         return {

@@ -7,7 +7,7 @@ import Header from '../../components/Header';
 import Modal from '../../components/Modal';
 import { constructThumbnailURL } from '../../utils/assetURL';
 import { isValidVideoURL } from '../../utils/common.utils';
-import { GENERIC_VIDEO_SUBMIT_ERROR, INVALID_VIDEO_URL_MESSAGE, PROCESSING_INFO_MESSAGE } from "../../constants/message.constants";
+import { GENERIC_VIDEO_SUBMIT_ERROR, INCORRECT_VIDEO_URL, INVALID_VIDEO_URL_MESSAGE, PROCESSING_INFO_MESSAGE } from "../../constants/message.constants";
 import { POLLING_TIME_INTERVAL_IN_SECONDS } from '../../constants/app.constants';
 import '../../styles/dashboard.css';
 
@@ -90,26 +90,29 @@ function Dashboard() {
         }
 
         try {
-            // Show info modal about video processing limit
+            // Submit first; only show processing modal on success
+            await submitVideo(searchQuery.trim());
+            setSearchQuery(''); // Clear input after successful submission
+
+            // Inform user that processing has started
             showModalMessage(
                 'info',
                 PROCESSING_INFO_MESSAGE.title,
                 PROCESSING_INFO_MESSAGE.description
             );
-
-            // Wait a moment for user to read the message
+            // Give user a moment to read
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            await submitVideo(searchQuery.trim());
-            setSearchQuery(''); // Clear input after successful submission
             await refresh(); // Refresh the streams list
         } catch (err) {
             console.error('Failed to submit video:', err);
-            showModalMessage(
-                'error',
-                GENERIC_VIDEO_SUBMIT_ERROR.title,
-                err.message || GENERIC_VIDEO_SUBMIT_ERROR.description
-            );
+            const msg = err?.message || GENERIC_VIDEO_SUBMIT_ERROR.description;
+            // Backend returns a 400 with this specific message for unreachable/unsupported sources
+            if (msg.includes('not reachable') || msg.includes('supported video formats')) {
+                showModalMessage('error', INCORRECT_VIDEO_URL.title, INCORRECT_VIDEO_URL.description);
+            } else {
+                showModalMessage('error', GENERIC_VIDEO_SUBMIT_ERROR.title, GENERIC_VIDEO_SUBMIT_ERROR.description);
+            }
         }
     }, [searchQuery, submitVideo, refresh]);
 
