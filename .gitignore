@@ -24,9 +24,9 @@ node_modules/
 .env
 .requirements*
 
-data/**/football.mp4
-data/**/ted-talk.mp4
-data/**/nbc-news.mp4
-data/**/agad-chess.mp4
-
+data/**/football*
+data/**/ted-talk*
+data/**/nbc-news*
+data/**/agadmator-chess*
+data/**/agad-chess*
 .DS_Store

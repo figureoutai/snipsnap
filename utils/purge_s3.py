@@ -3,7 +3,7 @@ import boto3
 # S3 configuration
 bucket_name = "highlight-clipping-service-main-975049899047"
 base_path = "streams/"  # Only folders under this path will be considered
-dontdelete = ["mediaconvert_input/", "ffd24461/", "1077be38/", "9e77ce1d/"]  # relative to base_path
+dontdelete = ["mediaconvert_input/",]  # relative to base_path
 
 s3 = boto3.resource("s3")
 bucket = s3.Bucket(bucket_name)

@@ -103,7 +103,7 @@ def convert_to_hls_and_store(
                 "OutputGroupSettings": {
                     "Type": "HLS_GROUP_SETTINGS",
                     "HlsGroupSettings": {
-                        "SegmentLength": 10,
+                        "SegmentLength": 6,
                         "Destination": destination,
                         "DestinationSettings": {
                             "S3Settings": {

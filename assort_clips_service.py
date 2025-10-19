@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import numpy as np
 
 from typing import List
 from llm.claude import Claude
@@ -29,18 +30,19 @@ GROUPING_AND_TITLE_PROMPT = """
     You are an AI assistant that groups sentences describing the same event. 
     You will be given a sequence of sentences in order describing the scenes from a video. Follow these steps for each input:
         1. Read the full list of sentences.
-        2. Compare adjacent sentences and decide whether each pair belongs to the same event.
-        3. Merge contiguous sentences into a group when they describe the same event.
-        4. Each group must be contiguous (consecutive indexes).
-        5. Give each group a short descriptive title (3-6 words is ideal). Do not give generic titles, give something that signifies the highlight. 
+        2. If there is a single sentence just return that as the group, with title in the provided output format.
+        3. Compare adjacent sentences and decide whether each pair belongs to the same event.
+        4. Merge contiguous sentences into a group when they describe the same event.
+        5. Each group must be contiguous (consecutive indexes).
+        6. Give each group a short descriptive title (3-6 words is ideal). Do not give generic titles, give something that signifies the highlight. 
             For examples:- 
                 1. Messi scored goal
                 2. Car crash
                 3. New product unveiled
-        6. Return only a valid JSON object with a top-level key "groups" whose value is a list of groups. Each group is an object with "title" and "indexes" (0-based list of integers).
-        7. Do not output any reasoning, explanations, or extra text — only the JSON.
-        8. If a sentence is unique (not contiguous with same-event neighbors), it becomes a single-item group.
-        9. Think step-by-step internally but do not reveal your chain-of-thought.
+        7. Return only a valid JSON object with a top-level key "groups" whose value is a list of groups. Each group is an object with "title" and "indexes" (0-based list of integers).
+        8. Do not output any reasoning, explanations, or extra text — only the JSON.
+        9. If a sentence is unique (not contiguous with same-event neighbors), it becomes a single-item group.
+        10. Think step-by-step internally but do not reveal your chain-of-thought.
 
     ---
 
@@ -185,6 +187,13 @@ class AssortClipsService:
     async def has_more_clips(self, stream_id, end_time):
         return await self.db_service.has_more_entries_after(stream_id, end_time)
 
+    def get_highlight_thresholds(self, scored_clips: List):
+        h_scores = [score["highlight_score"]for score in scored_clips]
+        s_scores = [score["saliency_score"]for score in scored_clips]
+        prim = round(np.percentile(h_scores, 70), 1)
+        sec = round(prim - 0.1, 1)
+        return (prim, sec), round(np.percentile(s_scores, 70), 1)
+
     def _clamp_to_edge_budget(self, orig_start: float, orig_end: float, new_start: float, new_end: float):
         """Clamp each edge shift to MAX_EDGE_SHIFT_SECONDS relative to original.
         If clamping breaks duration guardrails, fall back to the original span.
@@ -320,12 +329,14 @@ class AssortClipsService:
                     continue
             
             potential_highlights = []
+            (primary_threshold, secondary_threshold), saliency_threshold = self.get_highlight_thresholds(scored_clips)
+            logger.info(f"[AssortClipsService] thresholds for highlights are: ({primary_threshold, secondary_threshold}, and saliency is: {saliency_threshold})")
             # Write the logic
             for clip in scored_clips:
                 saliency_score = clip["saliency_score"]
                 highlight_score = clip["highlight_score"]
                 logger.info(f"[AssortClipsService] saliency: {saliency_score} and highlight score {highlight_score} for clip {clip["start_time"]} - {clip["end_time"]}")
-                if (highlight_score >= 0.7) or (saliency_score >= 0.7 and highlight_score >= 0.6):
+                if highlight_score >= primary_threshold or (saliency_score >= saliency_threshold and highlight_score >= secondary_threshold):
                     potential_highlights.append(1)
                 else:
                     potential_highlights.append(0)
