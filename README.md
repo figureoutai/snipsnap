@@ -14,14 +14,6 @@ A serverless system that accepts any `public video URL` and identifies and captu
 - `deploy.sh` — One‑stop deployment for infra, container image, and frontend.
 - `AGENTIC.md` — Details of the agentic refinement loop and knobs.
 
-## Features
-
-- URL submission via HTTP API; validates reachability and content type.
-- Real‑time ingestion: frame sampling + 16 kHz audio chunking + ASR.
-- 5‑second clip scoring → grouping → titling.
-- Topic and scene boundary snapping with LLM micro‑adjustments and safety clamps.
-- Assets served via CloudFront; metadata stored in Aurora; S3 holds frames/audio/video.
-
 ## Quick Start (Local)
 
 - Requirements
