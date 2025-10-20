@@ -1,10 +1,10 @@
 # SnipSnap
 
+<p align="center">
+  <img src="./poster-small.png" height="150px"/>
+</p>
+
 A serverless system that accepts any `public video URL` and identifies and captures highlight worthy moments in the video. A lightweight React app lets you submit URLs and view highlights.
-
-![Architecture](architecture.png)
-
-![preview of the site](site-preview.png)
 
 ## Monorepo Layout
 
@@ -121,6 +121,10 @@ flowchart TD
 
 ## Agentic Refinement
 See `AGENTIC.md` for the Observe → Plan → Act → Verify loop and safety guardrails.
+
+## Architecture
+
+![Architecture](architecture.png)
 
 ## Note
 The repository only streams 5 mins of a given video, to save costs, one can change it by configuring `MAX_STREAM_DURATION`
