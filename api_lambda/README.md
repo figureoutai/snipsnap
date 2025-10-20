@@ -1,38 +1,44 @@
 ## Local Testing
 
-- **Run the HTTP API with serverless-offline**:
+- Run the HTTP API with Serverless Offline (from repo root):
   ```bash
   npm run offline
   ```
-  The plugin serves the HTTP API on `http://localhost:3000/send`. In another terminal you can send requests, for example:
+  The API listens on `http://localhost:3000`. Examples:
   ```bash
-  curl -X POST "http://localhost:3000/video-url" \
+  # Submit a video URL for processing
+  curl -sS -X POST "http://localhost:3000/video-url" \
     -H "Content-Type: application/json" \
-    -d '{"message": "hello from offline"}'
+    -d '{"stream_url": "https://example.com/video.mp4"}'
+
+  # List streams (paginated)
+  curl -sS "http://localhost:3000/streams?page=1&limit=12"
+
+  # Fetch highlights for a stream
+  curl -sS "http://localhost:3000/highlights?stream_id=abc12345"
   ```
 ## Environment Variables
 
-- `BATCH_JOB_QUEUE` (required): name or ARN of the AWS Batch job queue that receives submitted jobs.
-- `BATCH_JOB_DEFINITION` (required): name or ARN of the AWS Batch job definition used for video processing jobs.
-- `SECRET_NAME` (required): name or ARN of the Secrets Manager secret that stores database credentials.
-- `DB_URL` (required): hostname of the Aurora cluster endpoint to connect to.
-- `DB_NAME` (required): database name in the Aurora cluster.
-- `DB_PORT` (optional): database port; defaults to `3306` when unset.
-- `AWS_REGION` (optional): AWS region to use for Secrets Manager lookups; defaults to `us-east-1`.
+- `BATCH_JOB_QUEUE` (required): AWS Batch job queue receiving submitted jobs.
+- `BATCH_JOB_DEFINITION` (required): AWS Batch job definition for the containerized pipeline.
+- `SECRET_NAME` (required): Secrets Manager ARN/name for DB credentials.
+- `DB_URL` (required): Aurora cluster endpoint hostname.
+- `DB_NAME` (required): Database name in Aurora.
+- `STREAM_METADATA_TABLE` (required): table that stores job status and final highlights (e.g., `stream_metadata`).
+- `FRONTEND_ORIGIN` (optional): default origin for CORS responses (set to CloudFront domain in deploys).
+- `ALLOWED_ORIGINS` (optional): comma‑separated allowlist; if the request `Origin` matches one of these, it is echoed.
+- `ACCEPT_STREAMS` (optional): `True`/`False` to globally allow submissions; defaults to `False` in `serverless.yaml`.
+- `AWS_REGION` (optional): Region for AWS SDK calls; defaults to `us-east-1`.
 
 ## Deployment
 
-1. Deploy with the Serverless Framework:
+1. Deploy the full stack (from repo root) or just the API using Serverless:
    ```bash
    npm run deploy
-   ```
-2. Retrieve the deployed endpoints:
-   ```bash
+   # or package/info/remove
    npm run info
-   ```
-3. (Optional) Remove the stack when no longer needed:
-   ```bash
    npm run remove
    ```
+2. Endpoints: see the outputs from `serverless info` or the `functions` block in `../serverless.yaml`.
 
-The deployment uses the IAM permissions defined in `../serverless.yaml` to grant the Lambda function access to AWS Batch and AWS Secrets Manager.
+This Lambda uses the IAM permissions defined in `../serverless.yaml` to access AWS Batch and AWS Secrets Manager.

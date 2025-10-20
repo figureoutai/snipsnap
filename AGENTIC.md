@@ -34,34 +34,6 @@ This document describes the current agentic refinement at the end of the pipelin
 - Verify: enforce midpoint safety and clamp each edge to `±MAX_EDGE_SHIFT_SECONDS` relative to the original grouped span; optionally apply `HIGHLIGHT_MIN_LEN/MAX_LEN` as sanity. If invalid after clamping, fall back to baseline.
 - Reason: compose `snap_reason` from plan + applied deltas and/or boundary sources.
 
-## Full End‑to‑End Flow
-
-```mermaid
-flowchart TD
-  A["Input: JOB_MESSAGE {stream_url, stream_id}"] --> B[main.py]
-  B -->|thread| C["StreamProcessor: demux A/V"]
-  C --> D["VideoProcessor: sample frames"]
-  C --> E["AudioProcessor: 5s chunks @16k"]
-  D -->|frames to disk+S3| F[("video_metadata")]
-  E -->|wav to disk+S3| G[("audio_metadata")]
-  E --> H["AudioTranscriber → transcripts"]
-  H -->|update| G
-  F --> I[ClipScorerService]
-  G --> I
-  I -->|5s scored clips| J[("score_metadata")]
-  J --> K[AssortClipsService]
-  K -->|group+title| L["Highlight spans"]
-  L --> M["SceneDetector (frames)"]
-  L --> N["TextTiling (transcript)"]
-  M --> O["Baseline snap (topic_first via snap_window)"]
-  N --> O
-  O --> P["EdgeRefiner (LLM plan)"]
-  P --> Q["Apply plan (snap/adjust)"]
-  Q --> R["Clamp edges to ±MAX_EDGE_SHIFT_SECONDS"]
-  R --> S["Verify (bounds/midpoint)"]
-  S --> T["Write highlights JSON to stream_metadata"]
-```
-
 ## Config Knobs (config.py)
 
 - Master toggle:
@@ -72,11 +44,3 @@ flowchart TD
   - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN` — optional sanity bounds.
 - TextTiling parameters: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`.
 ```
-
-
-## Why This Is Agentic
-
-- Perception: builds topic/scene boundaries and edge context (frames+transcript).
-- Planning: LLM selects a bounded, single action per highlight to improve edges.
-- Action: system executes the plan with snapper/micro‑deltas.
-- Verification: guardrails enforce constraints; a reason is recorded for traceability.
