@@ -27,7 +27,7 @@
 - `STREAM_METADATA_TABLE` (required): table that stores job status and final highlights (e.g., `stream_metadata`).
 - `FRONTEND_ORIGIN` (optional): default origin for CORS responses (set to CloudFront domain in deploys).
 - `ALLOWED_ORIGINS` (optional): comma‑separated allowlist; if the request `Origin` matches one of these, it is echoed.
-- `ACCEPT_STREAMS` (optional): `True`/`False` to globally allow submissions; defaults to `False` in `serverless.yaml`.
+- `ACCEPT_STREAMS: `True`/`False` to globally allow submissions; defaults to `True` in `serverless.yaml`.
 - `AWS_REGION` (optional): Region for AWS SDK calls; defaults to `us-east-1`.
 
 ## Deployment
