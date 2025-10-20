@@ -1,5 +1,3 @@
-# SnipSnap
-
 <p align="center">
   <img src="./poster-small.png" height="150px"/>
 </p>
