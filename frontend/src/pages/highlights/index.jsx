@@ -46,6 +46,9 @@ function Highlights() {
     const sourceVideoURL = useMemo(() => {
         if(!data)
             return '';
+        if(!data.streamId || !data.streamURL)
+            return '';
+        
         return constructVideoURL(data.streamId, data.streamURL.split("/").splice(-1)[0]);
     }, [data]);
 
