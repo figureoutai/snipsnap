@@ -112,9 +112,5 @@ flowchart TD
 ## Agentic Refinement
 See `AGENTIC.md` for the Observe → Plan → Act → Verify loop and safety guardrails.
 
-## Architecture
-
-![Architecture](architecture.png)
-
 ## Note
 The repository only streams 5 mins of a given video, to save costs, one can change it by configuring `MAX_STREAM_DURATION`
