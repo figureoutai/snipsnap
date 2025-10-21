@@ -5,32 +5,35 @@ from typing import Dict, List, Tuple, Optional
 
 import cv2
 
+from llm.claude import Claude
 from utils.logger import app_logger as logger
 from utils.helpers import numpy_to_base64, EMPTY_STRING, ERROR_STRING
 from repositories.aurora_service import AuroraService
 from candidate_clip import CandidateClip
 from config import AUDIO_CHUNK, VIDEO_FRAME_SAMPLE_RATE
-from agents.edge_refiner_agent import StrandsEdgeRefinerAgent
 
 
 LLM_EDGE_REFINER_PROMPT = """
-You are an expert highlight refiner.
+You are an expert highlight refiner. Improve the current clip edges with ONE action:
+- keep: use the current window as-is.
+- use_topic: re-snap to nearest transcript/topic boundaries.
+- use_scene: re-snap to nearest scene cuts.
+- micro_adjust: propose small delta seconds to shift edges (start_delta in [-1.0, +1.0], end_delta in [-1.5, +1.5]).
 
-Decide using tools only:
-- Call exactly one of: choose_keep | choose_topic | choose_scene | choose_micro_adjust.
-- If you choose micro_adjust, provide deltas within the allowed ranges.
-- Then call emit_plan(action, start_delta, end_delta, reason, confidence) as your final step.
+Prioritize transcript coherence (avoid cutting a word/sentence mid-way). Use scene cuts if transcript cues are weak.
+Respect constraints: final clip must remain within [min_len, max_len] seconds and must not cross the midpoint.
 
-Do not perform snapping or clamping — those are handled downstream.
-Prefer transcript coherence; use scene cues if transcript is weak.
+Return STRICT JSON only:
+{"action":"keep|use_topic|use_scene|micro_adjust","start_delta":0.0,"end_delta":0.0,"reason":"short","confidence":0.0}
+No extra text.
 """
 
 
 class EdgeRefiner:
     def __init__(self, db_pool_size: int = 5):
+        self.llm = Claude()
         self.db = AuroraService(pool_size=db_pool_size)
         self._db_ready = False
-        self._agent = StrandsEdgeRefinerAgent()
 
     async def _ensure_db(self):
         if not self._db_ready:
@@ -151,28 +154,19 @@ class EdgeRefiner:
 
         queries = [json.dumps(ctx), f"Transcript (inside window):\n{transcript or ''}"]
 
-        # Use Strands Agent with native @tool flow
         try:
-            instruction = (
-                f"{LLM_EDGE_REFINER_PROMPT}\n\n"
-                "Tool protocol: 1) choose_*; 2) emit_plan. Do not free-type text."
+            resp = await self.llm.invoke(
+                prompt=LLM_EDGE_REFINER_PROMPT,
+                response_type="json",
+                queries=queries,
+                images=images,
+                max_tokens=300,
             )
-            ctx_text = "\n\n".join(q for q in queries if q)
-            prompt = (
-                f"{instruction}\n\n"
-                f"orig_start={snapped_start:.3f}; orig_end={snapped_end:.3f};\n"
-                f"min_len={min_len:.2f}; max_len={max_len:.2f};\n"
-                f"start_delta_range={list(start_delta_range)}; end_delta_range={list(end_delta_range)};\n"
-                f"topics={topic_boundaries}; scenes={scene_boundaries};\n\n"
-                f"{ctx_text}"
-            )
-            output = await self._agent.invoke_async(prompt)
-            parsed = json.loads(output) if isinstance(output, str) else output
-            action = str(parsed.get("action", "keep")).lower().strip()
-            start_delta = float(parsed.get("start_delta", 0.0))
-            end_delta = float(parsed.get("end_delta", 0.0))
-            reason = str(parsed.get("reason", ""))
-            confidence = float(parsed.get("confidence", 0.0))
+            action = str(resp.get("action", "keep")).lower().strip()
+            start_delta = float(resp.get("start_delta", 0.0))
+            end_delta = float(resp.get("end_delta", 0.0))
+            reason = str(resp.get("reason", ""))
+            confidence = float(resp.get("confidence", 0.0))
             return {
                 "action": action,
                 "start_delta": start_delta,
@@ -181,5 +175,5 @@ class EdgeRefiner:
                 "confidence": confidence,
             }
         except Exception as e:
-            logger.warning(f"[EdgeRefiner] Strands agent refine failed: {e}")
+            logger.warning(f"[EdgeRefiner] LLM refine failed: {e}")
             return {"action": "keep", "start_delta": 0.0, "end_delta": 0.0, "reason": "fallback-keep", "confidence": 0.0}
