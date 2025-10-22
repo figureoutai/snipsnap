@@ -4,13 +4,13 @@ import json
 from typing import Dict, List, Tuple, Optional
 
 import cv2
-
-from llm.claude import Claude
+import base64
 from utils.logger import app_logger as logger
 from utils.helpers import numpy_to_base64, EMPTY_STRING, ERROR_STRING
 from repositories.aurora_service import AuroraService
 from candidate_clip import CandidateClip
 from config import AUDIO_CHUNK, VIDEO_FRAME_SAMPLE_RATE
+from agents.edge_refiner_agent import StrandsEdgeRefinerAgent
 
 
 LLM_EDGE_REFINER_PROMPT = """
@@ -31,7 +31,7 @@ No extra text.
 
 class EdgeRefiner:
     def __init__(self, db_pool_size: int = 5):
-        self.llm = Claude()
+        self._agent = StrandsEdgeRefinerAgent()
         self.db = AuroraService(pool_size=db_pool_size)
         self._db_ready = False
 
@@ -155,18 +155,34 @@ class EdgeRefiner:
         queries = [json.dumps(ctx), f"Transcript (inside window):\n{transcript or ''}"]
 
         try:
-            resp = await self.llm.invoke(
-                prompt=LLM_EDGE_REFINER_PROMPT,
-                response_type="json",
-                queries=queries,
-                images=images,
-                max_tokens=300,
+            instruction = (
+                f"{LLM_EDGE_REFINER_PROMPT}\n\n"
+                "Tool protocol: 1) choose_*; 2) emit_plan. Do not free-type text."
             )
-            action = str(resp.get("action", "keep")).lower().strip()
-            start_delta = float(resp.get("start_delta", 0.0))
-            end_delta = float(resp.get("end_delta", 0.0))
-            reason = str(resp.get("reason", ""))
-            confidence = float(resp.get("confidence", 0.0))
+            ctx_text = "\n\n".join(q for q in queries if q)
+            text_block = (
+                f"{instruction}\n\n"
+                f"orig_start={snapped_start:.3f}; orig_end={snapped_end:.3f};\n"
+                f"min_len={min_len:.2f}; max_len={max_len:.2f};\n"
+                f"start_delta_range={list(start_delta_range)}; end_delta_range={list(end_delta_range)};\n"
+                f"topics={topic_boundaries}; scenes={scene_boundaries};\n\n"
+                f"{ctx_text}"
+            )
+            # Build Strands content blocks: text + selected frames
+            content = [{"text": text_block}]
+            for img_b64 in images[:6]:
+                try:
+                    img_bytes = base64.b64decode(img_b64)
+                    content.append({"image": {"format": "jpeg", "source": {"bytes": img_bytes}}})
+                except Exception:
+                    continue
+            output = await self._agent.invoke_async_content(content)
+            parsed = json.loads(output) if isinstance(output, str) else output
+            action = str(parsed.get("action", "keep")).lower().strip()
+            start_delta = float(parsed.get("start_delta", 0.0))
+            end_delta = float(parsed.get("end_delta", 0.0))
+            reason = str(parsed.get("reason", ""))
+            confidence = float(parsed.get("confidence", 0.0))
             return {
                 "action": action,
                 "start_delta": start_delta,
@@ -175,5 +191,5 @@ class EdgeRefiner:
                 "confidence": confidence,
             }
         except Exception as e:
-            logger.warning(f"[EdgeRefiner] LLM refine failed: {e}")
+            logger.warning(f"[EdgeRefiner] Strands agent refine failed: {e}")
             return {"action": "keep", "start_delta": 0.0, "end_delta": 0.0, "reason": "fallback-keep", "confidence": 0.0}

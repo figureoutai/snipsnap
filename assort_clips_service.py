@@ -9,9 +9,10 @@ from utils.logger import app_logger as logger
 from utils.boundary_snapper import snap_window
 from evaluators.edge_refiner import EdgeRefiner
 from utils.helpers import get_video_frame_filename
+from nlp.text_tiling import text_tiling_boundaries
 from evaluators.snap_evaluator import SnapEvaluator
 from repositories.aurora_service import AuroraService
-from agents.boundary_agent import BoundaryAgent
+from detectors.scene_detector import detect_scene_boundaries
 from config import (
     STREAM_METADATA_TABLE,
     HIGHLIGHT_CHUNK,
@@ -138,7 +139,6 @@ class AssortClipsService:
         # Boundary caches per stream_id
         self._scene_boundaries = {}
         self._topic_boundaries = {}
-        self._boundary_agent: BoundaryAgent | None = None
         self._topic_words_count = {}
         self.snap_evaluator: SnapEvaluator | None = None
         self.edge_refiner: EdgeRefiner | None = None
@@ -240,14 +240,27 @@ class AssortClipsService:
         return words
 
     async def _ensure_boundaries(self, stream_id: str, clip_scorer_event: asyncio.Event | None = None):
-        # Always compute/update boundaries via Strands BoundaryAgent
+        # Scene boundaries from frames if not cached
+        if stream_id not in self._scene_boundaries:
+            frames_dir = os.path.join(BASE_DIR, stream_id, "frames")
+            if os.path.isdir(frames_dir):
+                try:
+                    cuts = detect_scene_boundaries(frames_dir=frames_dir, fps=VIDEO_FRAME_SAMPLE_RATE)
+                except Exception as e:
+                    logger.warning(f"[AssortClipsService] Scene detection failed: {e}")
+                    cuts = []
+            else:
+                cuts = []
+            self._scene_boundaries[stream_id] = cuts
+
+        # Topic boundaries via TextTiling, with lightweight refresh when new transcript arrives
         refresh_threshold = 100  # recompute when we have 100 new words
-        need_recompute = (stream_id not in self._scene_boundaries) or (stream_id not in self._topic_boundaries)
+        need_recompute = stream_id not in self._topic_boundaries
         try:
             words = await self._flatten_transcript_words(stream_id)
             current_count = len(words)
         except Exception as e:
-            logger.warning(f"[AssortClipsService] Failed to read words for boundary agent: {e}")
+            logger.warning(f"[AssortClipsService] Failed to read words for TextTiling: {e}")
             words = []
             current_count = 0
 
@@ -259,12 +272,12 @@ class AssortClipsService:
                 need_recompute = True
 
         if need_recompute:
-            if self._boundary_agent is None:
-                self._boundary_agent = BoundaryAgent()
-            base_path = f"{BASE_DIR}/{stream_id}"
-            res = await self._boundary_agent.get_boundaries(base_path=base_path, words=words, fps=VIDEO_FRAME_SAMPLE_RATE)
-            self._topic_boundaries[stream_id] = res.get("topic_boundaries", [])
-            self._scene_boundaries[stream_id] = res.get("scene_boundaries", [])
+            try:
+                topics = text_tiling_boundaries(words)
+            except Exception as e:
+                logger.warning(f"[AssortClipsService] TextTiling failed: {e}")
+                topics = []
+            self._topic_boundaries[stream_id] = topics
             self._topic_words_count[stream_id] = current_count
 
     def _snap_highlight(self, stream_id: str, start: float, end: float):
