@@ -17,19 +17,21 @@ A serverless system that accepts any `public video URL` and identifies and captu
 ## Quick Start (Local)
 
 - Requirements
+
   - Python 3.11, Node 18+, Docker, AWS CLI
   - `uv` for Python
 
 - Batch pipeline (standalone)
+
   - `uv run sync` to install deps from `pyproject.toml`.
   - Set `JOB_MESSAGE` and run the entrypoint:
     ```bash
     export JOB_MESSAGE='{"stream_url":"https://example.com/video.mp4","stream_id":"demo-123"}'
     uv run main
     ```
-    When you see `[Stream Processor] Ending the stream, exiting.`, press Ctrl+C to terminate cleanly.
 
 - Local HTTP API
+
   - From repo root: `npm install` then `npm run offline` (Serverless Offline at http://localhost:3000).
   - Submit a URL:
     ```bash
@@ -81,6 +83,7 @@ flowchart TD
 ## Configuration
 
 - Pipeline toggles (see `config.py`)
+
   - `AGENTIC_REFINEMENT_ENABLED` — skip/enable snapping + LLM refinement.
   - `MAX_EDGE_SHIFT_SECONDS`, `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN`.
   - TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`.
@@ -98,19 +101,24 @@ flowchart TD
 `./deploy.sh` orchestrates everything. Defaults: stage `main`, region `us-east-1`.
 
 - All components
+
   - `./deploy.sh`
 
 - Only infrastructure (Serverless stack)
+
   - `./deploy.sh --infra-only`
 
 - Only container image (build + push to ECR)
+
   - `./deploy.sh --image-only`
 
 - Only frontend (build → upload to S3 → CloudFront invalidation)
   - `./deploy.sh --frontend`
 
 ## Agentic Refinement
+
 See `AGENTIC.md` for the Observe → Plan → Act → Verify loop and safety guardrails.
 
 ## Note
+
 The repository only streams 5 mins of a given video, to save costs, one can change it by configuring `MAX_STREAM_DURATION`
