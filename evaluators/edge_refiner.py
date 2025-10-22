@@ -170,13 +170,15 @@ class EdgeRefiner:
             )
             # Build Strands content blocks: text + selected frames
             content = [{"text": text_block}]
-            for img_b64 in images[:6]:
+            for img_b64 in images:
                 try:
                     img_bytes = base64.b64decode(img_b64)
                     content.append({"image": {"format": "jpeg", "source": {"bytes": img_bytes}}})
                 except Exception:
                     continue
-            output = await self._agent.invoke_async_content(content)
+            # Create a fresh agent per call to avoid history growth and image accumulation
+            local_agent = StrandsEdgeRefinerAgent()
+            output = await local_agent.invoke_async_content(content)
             parsed = json.loads(output) if isinstance(output, str) else output
             action = str(parsed.get("action", "keep")).lower().strip()
             start_delta = float(parsed.get("start_delta", 0.0))

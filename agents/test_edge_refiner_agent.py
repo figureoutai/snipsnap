@@ -89,7 +89,6 @@ async def run_scenarios() -> None:
     except Exception as e:
         raise SystemExit(f"StrandsEdgeRefinerAgent import failed; ensure strands-agents is installed. Error: {e}")
 
-    agent = StrandsEdgeRefinerAgent()
 
     scenarios: List[Scenario] = [
         Scenario(
@@ -279,6 +278,8 @@ async def run_scenarios() -> None:
             content.append({"image": {"format": "jpeg", "source": {"bytes": b}}})
 
         print(f"\n=== Scenario: {sc.name} ===")
+        # Fresh agent per scenario to avoid history accumulation across runs
+        agent = StrandsEdgeRefinerAgent()
         out = await agent.invoke_async_content(content)
         try:
             plan = extract_plan(out)
