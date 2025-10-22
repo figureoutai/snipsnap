@@ -1,142 +1,116 @@
-# Clip Highlights
+<p align="center">
+  <img src="./poster-small.png" height="150px"/>
+</p>
 
-## Setting Up
+A serverless system that accepts any `public video URL` and identifies and captures highlight worthy moments in the video. A lightweight React app lets you submit URLs and view highlights.
 
-- `uv run sync` to download the requirements.
-- `uv run main` to run the project.
+## Monorepo Layout
 
-> `[Stream Processor] Ending the stream, exiting.` After this log press Ctrl+C to stop the program.
+- `frontend/` — Vite + React UI (submit URL, dashboard, highlight player).
+- `api_lambda/` — AWS Lambda handlers behind HTTP API Gateway (submit job, list streams, fetch highlights).
+- `main.py` + `stream_processor/` + `audio_transcriber.py` + `clip_scorer_service.py` + `assort_clips_service.py` — AWS Batch container that runs the end‑to‑end pipeline.
+- `repositories/` — Aurora access layer used by the Batch job.
+- `serverless.yaml` — Infrastructure (VPC, Aurora Serverless v2, S3, CloudFront, AWS Batch, API Gateway + Lambdas).
+- `deploy.sh` — One‑stop deployment for infra, container image, and frontend.
+- `AGENTIC.md` — Details of the agentic refinement loop and knobs.
 
-## Running (Batch)
+## Quick Start (Local)
 
-- The entrypoint reads a JSON job from the `JOB_MESSAGE` environment variable.
-- Example:
+- Requirements
+  - Python 3.11, Node 18+, Docker, AWS CLI
+  - `uv` for Python
 
+- Batch pipeline (standalone)
+  - `uv run sync` to install deps from `pyproject.toml`.
+  - Set `JOB_MESSAGE` and run the entrypoint:
+    ```bash
+    export JOB_MESSAGE='{"stream_url":"https://example.com/video.mp4","stream_id":"demo-123"}'
+    uv run main
+    ```
+    When you see `[Stream Processor] Ending the stream, exiting.`, press Ctrl+C to terminate cleanly.
+
+- Local HTTP API
+  - From repo root: `npm install` then `npm run offline` (Serverless Offline at http://localhost:3000).
+  - Submit a URL:
+    ```bash
+    curl -sS -X POST http://localhost:3000/video-url \
+      -H 'Content-Type: application/json' \
+      -d '{"stream_url":"https://example.com/video.mp4"}'
+    ```
+  - List streams: `curl -sS 'http://localhost:3000/streams?page=1&limit=12'`
+  - Fetch highlights: `curl -sS 'http://localhost:3000/highlights?stream_id=demo-123'`
+
+- Frontend (development)
+  - `cd frontend && npm install && npm run dev` (opens http://localhost:5173).
+  - Create `frontend/.env.local`:
+    ```env
+    VITE_APP_NAME="Clip Highlights"
+    VITE_API_BASE_URL=http://localhost:3000
+    # When deployed, set to https://<CloudFrontDomain>/streams/
+    VITE_ASSET_BASE_URL=http://localhost:3000/streams/
+    ```
+
+## End‑to‑End Flow
+
+```mermaid
+flowchart TD
+  A["Input: JOB_MESSAGE {stream_url, stream_id}"] --> B[main.py]
+  B -->|thread| C["StreamProcessor: demux A/V"]
+  C --> D["VideoProcessor: sample frames"]
+  C --> E["AudioProcessor: 5s chunks @16k"]
+  D -->|frames to disk+S3| F[("video_metadata")]
+  E -->|wav to disk+S3| G[("audio_metadata")]
+  E --> H["AudioTranscriber → transcripts"]
+  H -->|update| G
+  F --> I[ClipScorerService]
+  G --> I
+  I -->|5s scored clips| J[("score_metadata")]
+  J --> K[AssortClipsService]
+  K -->|group+title| L["Highlight spans"]
+  L --> M["SceneDetector (frames)"]
+  L --> N["TextTiling (transcript)"]
+  M --> O["Baseline snap (topic_first via snap_window)"]
+  N --> O
+  O --> P["EdgeRefiner (LLM plan)"]
+  P --> Q["Apply plan (snap/adjust)"]
+  Q --> R["Clamp edges to ±MAX_EDGE_SHIFT_SECONDS"]
+  R --> S["Verify (bounds/midpoint)"]
+  S --> T["Write highlights JSON to stream_metadata"]
 ```
-export JOB_MESSAGE='{"stream_url": "https://example.com/video.mp4", "stream_id": "demo-123"}'
-uv run main
-```
-
-## Work Flow
-
-![Work Flow](./workflow.png)
-
-### Candidate Clips
-
-    - Sampled frames from video in 5 sec interval
-    - Audio for the same interval
-    - Intervals will be like 0-5, 3-8, 6-11 etc.
-
-### Saliency Scorer Example
-
-```python
-import cv2
-import numpy as np
-import torch
-import librosa
-from open_clip import create_model_and_transforms, get_tokenizer
-from torchvision import transforms
-
-class SaliencyScorer:
-    def __init__(self, clip_model="ViT-B-32", device="cuda"):
-        # ---- CLIP encoder ----
-        self.model, _, self.preprocess = create_model_and_transforms(
-            clip_model, pretrained="openai"
-        )
-        self.model.eval().to(device)
-        self.device = device
-        self.prev_gray = None
-        self.prev_emb  = None
-
-    # ---------- Optical Flow ----------
-    def motion_score(self, frame_bgr):
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        if self.prev_gray is None:
-            self.prev_gray = gray
-            return 0.0
-        flow = cv2.calcOpticalFlowFarneback(
-            self.prev_gray, gray,
-            None, 0.5, 3, 15, 3, 5, 1.2, 0
-        )
-        mag = np.linalg.norm(flow, axis=2)
-        self.prev_gray = gray
-        return float(np.mean(mag))
-
-    # ---------- Embedding Delta ----------
-    @torch.no_grad()
-    def embedding_delta(self, frame_bgr):
-        img = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        pil_img = transforms.ToPILImage()(torch.from_numpy(img).permute(2,0,1))
-        emb = self.model.encode_image(self.preprocess(pil_img).unsqueeze(0).to(self.device))
-        emb = emb / emb.norm(dim=-1, keepdim=True)
-        if self.prev_emb is None:
-            self.prev_emb = emb
-            return 0.0
-        delta = 1 - (emb @ self.prev_emb.T).item()
-        self.prev_emb = emb
-        return float(delta)
-
-    # ---------- Audio RMS ----------
-    @staticmethod
-    def audio_rms(y, sr, start_sec, end_sec):
-        start = int(start_sec * sr)
-        end   = int(end_sec   * sr)
-        clip  = y[start:end]
-        rms = librosa.feature.rms(y=clip)[0]
-        return float(np.mean(rms))
-
-    # ---------- Combined Score ----------
-    def combined_score(self, frame_bgr, audio_y=None, sr=None,
-                       start_sec=None, end_sec=None,
-                       w_motion=0.4, w_embed=0.4, w_audio=0.2):
-        m  = self.motion_score(frame_bgr)
-        e  = self.embedding_delta(frame_bgr)
-        a  = 0.0
-        if audio_y is not None and sr is not None:
-            a = self.audio_rms(audio_y, sr, start_sec, end_sec)
-        return w_motion*m + w_embed*e + w_audio*a
-```
-
-### Post Processing
-
-#### Temporal Smoothing & Peak Detection
-
-    - Collect all highlight_scores aligned to clip start times.
-    - Smooth with a Gaussian or median filter to reduce noise.
-    - Mark peaks where score > threshold (e.g., 90th percentile).
-    - Merge overlapping/adjacent peaks to form continuous highlight intervals.
-
-#### Post Processing (Highlights)
-
-    - Group & Title contiguous 5s clips (LLM grouping)
-    - Baseline Snap (topic-first):
-        * Topic boundaries via TextTiling on transcripts (refreshed as transcripts grow)
-        * Scene cuts from saved frames (HSV histogram distance)
-    - Agentic Refinement (assort stage):
-        * LLM observes transcript + edge/mid frames + nearest boundaries
-        * LLM plans ONE action: keep | use_topic | use_scene | micro_adjust
-        * System executes plan deterministically and clamps each edge to ±MAX_EDGE_SHIFT_SECONDS relative to the original grouped span
-        * Writes a short snap_reason explaining the change
-    - Finalize highlights (thumbnail based on chosen start)
-
-## Agentic Refinement (Docs)
-
-- See `agentic.md` for the full description of the Observe → Plan (LLM) → Act → Verify loop and a Mermaid diagram of the end-to-end flow.
 
 ## Configuration
 
-- Master toggle (config.py)
-  - `AGENTIC_REFINEMENT_ENABLED` — when False, post-grouping steps (snapping, boundaries, LLM) are skipped and grouped highlights are returned as-is.
+- Pipeline toggles (see `config.py`)
+  - `AGENTIC_REFINEMENT_ENABLED` — skip/enable snapping + LLM refinement.
+  - `MAX_EDGE_SHIFT_SECONDS`, `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN`.
+  - TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`.
 
-- Edge budget & duration sanity (config.py)
-  - `MAX_EDGE_SHIFT_SECONDS` (per-edge clamp after refinement)
-  - `HIGHLIGHT_MIN_LEN`, `HIGHLIGHT_MAX_LEN` (sanity bounds)
-- TextTiling: `TEXT_TILING_BLOCK`, `TEXT_TILING_STEP`, `TEXT_TILING_SMOOTH`, `TEXT_TILING_CUTOFF_STD`
-  - `AGENTIC_REFINEMENT_ENABLED = True` (master toggle for all post-grouping steps)
+- Lambda/Batch environment (see `serverless.yaml`)
+  - `SECRET_NAME`, `DB_URL`, `DB_NAME` — Aurora access.
+  - `BATCH_JOB_QUEUE`, `BATCH_JOB_DEFINITION` — job submission.
+  - `STREAM_METADATA_TABLE` — target table for job status/highlights.
+  - `CDN_DOMAIN` — CloudFront domain for assets; consumed by the Batch job.
+  - `FRONTEND_ORIGIN`, `ALLOWED_ORIGINS` — CORS controls.
+  - `ACCEPT_STREAMS` — gate submissions (set `True` to accept new jobs).
 
-### How to Deploy
-Running `./deploy.sh` deploys everything, frontend, backend and infra
-deploy.sh
-- --frontend: build Vite app, upload to S3, invalidate CloudFront.
-- --infra-only: only serverless deploy.
-- --image-only: only build/push the ECR image.
+## Deployment
+
+`./deploy.sh` orchestrates everything. Defaults: stage `main`, region `us-east-1`.
+
+- All components
+  - `./deploy.sh`
+
+- Only infrastructure (Serverless stack)
+  - `./deploy.sh --infra-only`
+
+- Only container image (build + push to ECR)
+  - `./deploy.sh --image-only`
+
+- Only frontend (build → upload to S3 → CloudFront invalidation)
+  - `./deploy.sh --frontend`
+
+## Agentic Refinement
+See `AGENTIC.md` for the Observe → Plan → Act → Verify loop and safety guardrails.
+
+## Note
+The repository only streams 5 mins of a given video, to save costs, one can change it by configuring `MAX_STREAM_DURATION`
